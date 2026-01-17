@@ -182,15 +182,28 @@ class image_features(ManagerTermBase):
             depth_images_norm = []
             for img in depth_images_np:
                 depth_images_norm.append(img)
-            rows = []
-            ncols = 4
-            for i in range(0, len(depth_images_norm), ncols):
-                row = np.hstack(depth_images_norm[i:i+ncols])  
-                rows.append(row)
+            
+            if len(depth_images_norm) > 0:
+                rows = []
+                # 根据图像数量动态调整 ncols，确保能整除
+                num_images = len(depth_images_norm)
+                # 优先使用4列，如果不能整除则找一个合适的除数
+                ncols = 4
+                if num_images % ncols != 0:
+                    # 找一个能整除 num_images 的 ncols（在2-8之间）
+                    for candidate in [2, 3, 4, 5, 6, 7, 8]:
+                        if num_images % candidate == 0:
+                            ncols = candidate
+                            break
+                
+                for i in range(0, len(depth_images_norm), ncols):
+                    row = np.hstack(depth_images_norm[i:i+ncols])  
+                    rows.append(row)
 
-            grid_img = np.vstack(rows)   
-            cv2.imshow("depth_images_grid", grid_img)
-            cv2.waitKey(1)
+                if len(rows) > 0:
+                    grid_img = np.vstack(rows)   
+                    cv2.imshow("depth_images_grid", grid_img)
+                    cv2.waitKey(1)
         return self.depth_buffer[:, -2].to(env.device)
 
     def _process_depth_image(self, depth_image):

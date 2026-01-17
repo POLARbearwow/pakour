@@ -6,7 +6,7 @@
 """Script to train RL agent with RSL-RL."""
 
 """Launch Isaac Sim Simulator first."""
-import os 
+import os
 import argparse
 import sys
 
@@ -18,15 +18,42 @@ import cli_args  # isort: skip
 
 # add argparse arguments
 parser = argparse.ArgumentParser(description="Train an RL agent with RSL-RL.")
-parser.add_argument("--video", action="store_true", default=False, help="Record videos during training.")
-parser.add_argument("--video_length", type=int, default=200, help="Length of the recorded video (in steps).")
-parser.add_argument("--video_interval", type=int, default=2000, help="Interval between video recordings (in steps).")
-parser.add_argument("--num_envs", type=int, default=None, help="Number of environments to simulate.")
-parser.add_argument("--task", type=str, default=None, help="Name of the task.")
-parser.add_argument("--seed", type=int, default=None, help="Seed used for the environment")
-parser.add_argument("--max_iterations", type=int, default=None, help="RL Policy training iterations.")
 parser.add_argument(
-    "--distributed", action="store_true", default=False, help="Run training with multiple GPUs or nodes."
+    "--video", action="store_true", default=False, help="Record videos during training."
+)
+parser.add_argument(
+    "--video_length",
+    type=int,
+    default=200,
+    help="Length of the recorded video (in steps).",
+)
+parser.add_argument(
+    "--video_interval",
+    type=int,
+    default=2000,
+    help="Interval between video recordings (in steps).",
+)
+parser.add_argument(
+    "--num_envs", type=int, default=None, help="Number of environments to simulate."
+)
+parser.add_argument("--task", type=str, default=None, help="Name of the task.")
+parser.add_argument(
+    "--seed", type=int, default=None, help="Seed used for the environment"
+)
+parser.add_argument(
+    "--max_iterations", type=int, default=None, help="RL Policy training iterations."
+)
+parser.add_argument(
+    "--distributed",
+    action="store_true",
+    default=False,
+    help="Run training with multiple GPUs or nodes.",
+)
+parser.add_argument(
+    "--debug",
+    action="store_true",
+    default=False,
+    help="Enable debug mode to reduce memory usage for visualization.",
 )
 # append RSL-RL cli arguments
 cli_args.add_rsl_rl_args(parser)
@@ -55,11 +82,27 @@ from packaging import version
 # for distributed training, check minimum supported rsl-rl version
 RSL_RL_VERSION = "2.3.1"
 installed_version = metadata.version("rsl-rl-lib")
-if args_cli.distributed and version.parse(installed_version) < version.parse(RSL_RL_VERSION):
+if args_cli.distributed and version.parse(installed_version) < version.parse(
+    RSL_RL_VERSION
+):
     if platform.system() == "Windows":
-        cmd = [r".\isaaclab.bat", "-p", "-m", "pip", "install", f"rsl-rl-lib=={RSL_RL_VERSION}"]
+        cmd = [
+            r".\isaaclab.bat",
+            "-p",
+            "-m",
+            "pip",
+            "install",
+            f"rsl-rl-lib=={RSL_RL_VERSION}",
+        ]
     else:
-        cmd = ["./isaaclab.sh", "-p", "-m", "pip", "install", f"rsl-rl-lib=={RSL_RL_VERSION}"]
+        cmd = [
+            "./isaaclab.sh",
+            "-p",
+            "-m",
+            "pip",
+            "install",
+            f"rsl-rl-lib=={RSL_RL_VERSION}",
+        ]
     print(
         f"Please install the correct version of RSL-RL.\nExisting version is: '{installed_version}'"
         f" and required version is: '{RSL_RL_VERSION}'.\nTo install the correct version, run:"
@@ -74,7 +117,9 @@ import os
 import torch
 from datetime import datetime
 
-from scripts.rsl_rl.modules.on_policy_runner_with_extractor import OnPolicyRunnerWithExtractor
+from scripts.rsl_rl.modules.on_policy_runner_with_extractor import (
+    OnPolicyRunnerWithExtractor,
+)
 
 from isaaclab.envs import (
     DirectMARLEnv,
@@ -85,15 +130,17 @@ from isaaclab.envs import (
 )
 from isaaclab.utils.dict import print_dict
 from isaaclab.utils.io import dump_pickle, dump_yaml
-from parkour_tasks.extreme_parkour_task.config.go2.agents.parkour_rl_cfg import ParkourRslRlOnPolicyRunnerCfg
+from parkour_tasks.extreme_parkour_task.config.go2.agents.parkour_rl_cfg import (
+    ParkourRslRlOnPolicyRunnerCfg,
+)
 from scripts.rsl_rl.vecenv_wrapper import ParkourRslRlVecEnvWrapper
+
 # import isaaclab_tasks  # noqa: F401
 import parkour_tasks  # noqa: F401
 from isaaclab_tasks.utils import get_checkpoint_path
 from isaaclab_tasks.utils.hydra import hydra_task_config
-from parkour_isaaclab.envs import (
-ParkourManagerBasedRLEnv
-)
+from parkour_isaaclab.envs import ParkourManagerBasedRLEnv
+
 # PLACEHOLDER: Extension template (do not remove this comment)
 
 torch.backends.cuda.matmul.allow_tf32 = True
@@ -103,21 +150,71 @@ torch.backends.cudnn.benchmark = False
 
 
 @hydra_task_config(args_cli.task, "rsl_rl_cfg_entry_point")
-def main(env_cfg: ParkourManagerBasedRLEnv |ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agent_cfg: ParkourRslRlOnPolicyRunnerCfg):
+def main(
+    env_cfg: (
+        ParkourManagerBasedRLEnv
+        | ManagerBasedRLEnvCfg
+        | DirectRLEnvCfg
+        | DirectMARLEnvCfg
+    ),
+    agent_cfg: ParkourRslRlOnPolicyRunnerCfg,
+):
     """Train with RSL-RL agent."""
-    
 
     # override configurations with non-hydra CLI arguments
     agent_cfg = cli_args.update_rsl_rl_cfg(agent_cfg, args_cli)
-    env_cfg.scene.num_envs = args_cli.num_envs if args_cli.num_envs is not None else env_cfg.scene.num_envs
+
+    # debug mode: reduce memory usage for visualization
+    if args_cli.debug:
+        print("[DEBUG] Debug mode enabled - reducing memory usage for visualization")
+        # 1. 禁用 wandb 日志记录（使用 tensorboard）
+        if hasattr(agent_cfg, "logger") and agent_cfg.logger == "wandb":
+            agent_cfg.logger = "tensorboard"
+            print("[DEBUG] Switched logger from wandb to tensorboard")
+        # 2. 设置环境数量为 64（如果用户没有指定），确保是4的倍数以便可视化
+        if args_cli.num_envs is None:
+            env_cfg.scene.num_envs = 64
+            print(f"[DEBUG] Set num_envs to 64")
+        else:
+            # 确保 num_envs 是 4 的倍数，避免可视化时维度不匹配
+            num_envs = args_cli.num_envs
+            if num_envs % 4 != 0:
+                num_envs = (num_envs // 4) * 4  # 向下取整到最近的4的倍数
+                if num_envs == 0:
+                    num_envs = 4  # 至少4个环境
+                print(
+                    f"[DEBUG] Adjusted num_envs from {args_cli.num_envs} to {num_envs} (must be multiple of 4 for visualization)"
+                )
+            env_cfg.scene.num_envs = num_envs
+        # 3. 设置地形行数和列数为较小值
+        if hasattr(env_cfg.scene, "terrain") and hasattr(
+            env_cfg.scene.terrain, "terrain_generator"
+        ):
+            if hasattr(env_cfg.scene.terrain.terrain_generator, "num_rows"):
+                env_cfg.scene.terrain.terrain_generator.num_rows = 5
+                print(f"[DEBUG] Set terrain num_rows to 5")
+            if hasattr(env_cfg.scene.terrain.terrain_generator, "num_cols"):
+                env_cfg.scene.terrain.terrain_generator.num_cols = 5
+                print(f"[DEBUG] Set terrain num_cols to 5")
+    else:
+        env_cfg.scene.num_envs = (
+            args_cli.num_envs
+            if args_cli.num_envs is not None
+            else env_cfg.scene.num_envs
+        )
+
     agent_cfg.max_iterations = (
-        args_cli.max_iterations if args_cli.max_iterations is not None else agent_cfg.max_iterations
+        args_cli.max_iterations
+        if args_cli.max_iterations is not None
+        else agent_cfg.max_iterations
     )
 
     # set the environment seed
     # note: certain randomizations occur in the environment initialization so we set the seed here
     env_cfg.seed = agent_cfg.seed
-    env_cfg.sim.device = args_cli.device if args_cli.device is not None else env_cfg.sim.device
+    env_cfg.sim.device = (
+        args_cli.device if args_cli.device is not None else env_cfg.sim.device
+    )
 
     # multi-gpu training configuration
     if args_cli.distributed:
@@ -139,19 +236,26 @@ def main(env_cfg: ParkourManagerBasedRLEnv |ManagerBasedRLEnvCfg | DirectRLEnvCf
     print(f"Exact experiment name requested from command line: {log_dir}")
     if agent_cfg.run_name:
         log_dir += f"_{agent_cfg.run_name}"
-        
+
     log_dir = os.path.join(log_root_path, log_dir)
 
     # create isaac environment
-    env = gym.make(args_cli.task, cfg=env_cfg, render_mode="rgb_array" if args_cli.video else None)
+    env = gym.make(
+        args_cli.task, cfg=env_cfg, render_mode="rgb_array" if args_cli.video else None
+    )
 
     # # convert to single-agent instance if required by the RL algorithm
     if isinstance(env.unwrapped, DirectMARLEnv):
         env = multi_agent_to_single_agent(env)
-    
+
     # save resume path before creating a new log_dir
-    if agent_cfg.resume or agent_cfg.algorithm.class_name == "DistillationWithExtractor":
-        resume_path = get_checkpoint_path(log_root_path, agent_cfg.load_run, agent_cfg.load_checkpoint)
+    if (
+        agent_cfg.resume
+        or agent_cfg.algorithm.class_name == "DistillationWithExtractor"
+    ):
+        resume_path = get_checkpoint_path(
+            log_root_path, agent_cfg.load_run, agent_cfg.load_checkpoint
+        )
 
     # # wrap for video recording
     if args_cli.video:
@@ -168,11 +272,16 @@ def main(env_cfg: ParkourManagerBasedRLEnv |ManagerBasedRLEnvCfg | DirectRLEnvCf
     # wrap around environment for rsl-rl
     env = ParkourRslRlVecEnvWrapper(env, clip_actions=agent_cfg.clip_actions)
     # # create runner from rsl-rl
-    runner = OnPolicyRunnerWithExtractor(env, agent_cfg.to_dict(), log_dir=log_dir, device=agent_cfg.device)
+    runner = OnPolicyRunnerWithExtractor(
+        env, agent_cfg.to_dict(), log_dir=log_dir, device=agent_cfg.device
+    )
     # # write git state to logs
     runner.add_git_repo_to_log(__file__)
     # load the checkpoint
-    if agent_cfg.resume or agent_cfg.algorithm.class_name == "DistillationWithExtractor":
+    if (
+        agent_cfg.resume
+        or agent_cfg.algorithm.class_name == "DistillationWithExtractor"
+    ):
         print(f"[INFO]: Loading model checkpoint from: {resume_path}")
         # load previously trained model
         runner.load(resume_path)
@@ -183,7 +292,9 @@ def main(env_cfg: ParkourManagerBasedRLEnv |ManagerBasedRLEnvCfg | DirectRLEnvCf
     dump_pickle(os.path.join(log_dir, "params", "agent.pkl"), agent_cfg)
 
     # # # run training
-    runner.learn(num_learning_iterations=agent_cfg.max_iterations, init_at_random_ep_len=True)
+    runner.learn(
+        num_learning_iterations=agent_cfg.max_iterations, init_at_random_ep_len=True
+    )
 
     # close the simulator
     env.close()
