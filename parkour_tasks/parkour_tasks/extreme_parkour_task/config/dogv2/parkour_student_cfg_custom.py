@@ -1,11 +1,4 @@
-"""
-自定义Student配置文件 - 用于dogV2.2.4机器人
-原始文件: ../go2/parkour_student_cfg.py (保留作为参考)
 
-主要修改：
-1. 使用default_cfg_custom中的配置
-2. 使用parkour_mdp_cfg_custom中的配置
-"""
 from isaaclab.utils import configclass
 ##
 # Pre-defined configs

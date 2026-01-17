@@ -5,6 +5,7 @@
 主要修改：
 1. 使用default_cfg_custom中的配置
 2. 更新传感器prim_path为dogV2的base link名称
+3. 使用CustomRobotCfg替换默认的UNITREE_GO2_CFG
 """
 from isaaclab.sensors import ContactSensorCfg, RayCasterCfg, patterns
 from isaaclab.utils import configclass
@@ -15,11 +16,13 @@ from parkour_isaaclab.terrains.extreme_parkour.config.parkour import EXTREME_PAR
 from parkour_isaaclab.envs import ParkourManagerBasedRLEnvCfg
 from .parkour_mdp_cfg_custom import * 
 from parkour_tasks.default_cfg_custom import ParkourDefaultSceneCfg, VIEWER, BASE_LINK_NAME
+from parkour_tasks.custom_robot_cfg import CustomRobotCfg  # 导入自定义机器人配置
 
 @configclass
 class ParkourTeacherSceneCfg(ParkourDefaultSceneCfg):
+    robot = CustomRobotCfg(prim_path="{ENV_REGEX_NS}/Robot")
+    
     height_scanner = RayCasterCfg(
-        # 使用default_cfg_custom中定义的BASE_LINK_NAME
         prim_path=f"{{ENV_REGEX_NS}}/Robot/{BASE_LINK_NAME}",
         offset=RayCasterCfg.OffsetCfg(pos=(0.375, 0.0, 20.0)),
         attach_yaw_only=True,

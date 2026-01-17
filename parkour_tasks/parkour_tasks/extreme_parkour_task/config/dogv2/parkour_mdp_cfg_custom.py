@@ -4,7 +4,8 @@
 
 主要修改：
 1. 更新关节名称匹配规则（.*_HipA_joint, .*_HipF_joint, .*_Knee_joint）
-2. 更新身体名称匹配规则（.*_Foot.*, .*base.*, .*HipF.*, .*Knee.*）
+2. 更新身体名称匹配规则（.*_Foot_link, .*base_link, .*HipF_link, .*Knee_link）
+实际body名称: ['base_link', 'LF_HipA_link', 'LF_HipF_link', 'LF_Knee_link', 'LF_Foot_link', ...]
 """
 from isaaclab.managers import EventTermCfg as EventTerm
 from isaaclab.managers import ObservationGroupCfg as ObsGroup
@@ -60,7 +61,7 @@ class TeacherObservationsCfg:
             func=observations.ExtremeParkourObservations,
             params={            
             "asset_cfg":SceneEntityCfg("robot"),
-            "sensor_cfg":SceneEntityCfg("contact_forces", body_names=".*_Foot.*"),  # 修改：匹配Foot
+            "sensor_cfg":SceneEntityCfg("contact_forces", body_names=".*_Foot_link"),  # 修改：匹配Foot_link
             "parkour_name":'base_parkour',
             "history_length": 10
             },
@@ -78,7 +79,7 @@ class StudentObservationsCfg:
             func=observations.ExtremeParkourObservations,
             params={            
             "asset_cfg":SceneEntityCfg("robot"),
-            "sensor_cfg":SceneEntityCfg("contact_forces", body_names=".*_Foot.*"),  # 修改：匹配Foot
+            "sensor_cfg":SceneEntityCfg("contact_forces", body_names=".*_Foot_link"),  # 修改：匹配Foot_link
             "parkour_name":'base_parkour',
             "history_length": 10,
             },
@@ -117,8 +118,8 @@ class StudentRewardsCfg:
         func=rewards.reward_collision, 
         weight=-0., 
         params={
-            # 修改：匹配dogV2的身体名称
-            "sensor_cfg":SceneEntityCfg("contact_forces", body_names=[".*base.*",".*HipF.*",".*Knee.*"]),
+            # 修改：匹配dogV2的身体名称（HipF_link, Knee_link, base_link）
+            "sensor_cfg":SceneEntityCfg("contact_forces", body_names=[".*base_link",".*HipF_link",".*Knee_link"]),
         },
     )
     
@@ -126,25 +127,24 @@ class StudentRewardsCfg:
 @configclass
 class TeacherRewardsCfg:
     """Reward terms for the MDP.
-    原始Go2的身体名称: ['base', 'FL_hip', 'FL_thigh', 'FL_calf', 'FL_foot', ...]
-    dogV2的身体名称: ['.*base.*', '.*LF_Foot.*', '.*RF_Foot.*', '.*LR_Foot.*', '.*RR_Foot.*', ...]
+    实际body名称: ['base_link', 'LF_HipA_link', 'LF_HipF_link', 'LF_Knee_link', 'LF_Foot_link', ...]
     """
 # Available Body strings: 
     reward_collision = RewTerm(
         func=rewards.reward_collision, 
         weight=-10., 
         params={
-            # 修改：匹配dogV2的身体名称
-            "sensor_cfg":SceneEntityCfg("contact_forces", body_names=[".*base.*",".*HipF.*",".*Knee.*"]),
+            # 修改：匹配dogV2的身体名称（HipF_link, Knee_link, base_link）
+            "sensor_cfg":SceneEntityCfg("contact_forces", body_names=[".*base_link",".*HipF_link",".*Knee_link"]),
         },
     )
     reward_feet_edge = RewTerm(
         func=rewards.reward_feet_edge, 
         weight=-1.0, 
         params={
-            # 修改：匹配dogV2的脚部名称
-            "asset_cfg":SceneEntityCfg(name="robot", body_names=[".*LF_Foot.*",".*RF_Foot.*",".*LR_Foot.*",".*RR_Foot.*"]),
-            "sensor_cfg":SceneEntityCfg(name="contact_forces", body_names=".*_Foot.*"),
+            # 修改：匹配dogV2的脚部名称（注意顺序：LF, LR, RF, RR）
+            "asset_cfg":SceneEntityCfg(name="robot", body_names=["LF_Foot_link","LR_Foot_link","RF_Foot_link","RR_Foot_link"]),
+            "sensor_cfg":SceneEntityCfg(name="contact_forces", body_names=".*_Foot_link"),
             "parkour_name":'base_parkour',
         },
     )
@@ -211,8 +211,8 @@ class TeacherRewardsCfg:
         func=rewards.reward_feet_stumble, 
         weight=-1.0, 
         params={
-            # 修改：匹配Foot
-            "sensor_cfg":SceneEntityCfg("contact_forces", body_names=".*_Foot.*"),
+            # 修改：匹配Foot_link
+            "sensor_cfg":SceneEntityCfg("contact_forces", body_names=".*_Foot_link"),
         },
     )
     reward_tracking_goal_vel = RewTerm(
@@ -282,8 +282,7 @@ class EventCfg:
         func= randomize_rigid_body_mass,
         mode="startup",
         params={
-            # 修改：匹配base
-            "asset_cfg": SceneEntityCfg("robot", body_names=".*base.*"),
+            "asset_cfg": SceneEntityCfg("robot", body_names="base_link"),
             "mass_distribution_params": (-1., 3.0),
             "operation": "add",
             },
@@ -292,8 +291,7 @@ class EventCfg:
         func= events.randomize_rigid_body_com,
         mode="startup",
         params={
-            # 修改：匹配base
-            "asset_cfg": SceneEntityCfg("robot", body_names=".*base.*"),
+            "asset_cfg": SceneEntityCfg("robot", body_names="base_link"),
             "com_range": {'x':(-0.02, 0.02),'y':(-0.02, 0.02),'z':(-0.02, 0.02)}
             },
     )
@@ -316,8 +314,7 @@ class EventCfg:
         func=apply_external_force_torque,
         mode="reset",
         params={
-            # 修改：匹配base
-            "asset_cfg": SceneEntityCfg("robot", body_names=".*base.*"),
+            "asset_cfg": SceneEntityCfg("robot", body_names="base_link"),
             "force_range": (0.0, 0.0),
             "torque_range": (-0.0, 0.0),
         },

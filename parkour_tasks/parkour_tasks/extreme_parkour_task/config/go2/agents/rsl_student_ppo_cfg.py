@@ -13,7 +13,7 @@ from isaaclab.utils import configclass
 class UnitreeGo2ParkourStudentPPORunnerCfg(ParkourRslRlOnPolicyRunnerCfg):
     num_steps_per_env = 24 
     max_iterations = 50000 
-    save_interval = 100
+    save_interval = 500
     experiment_name = "unitree_go2_parkour"
     empirical_normalization = False
     policy = ParkourRslRlPpoActorCriticCfg(

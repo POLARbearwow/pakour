@@ -16,7 +16,7 @@ from isaaclab.utils import configclass
 class DogV2ParkourTeacherPPORunnerCfg(ParkourRslRlOnPolicyRunnerCfg):
     num_steps_per_env = 24
     max_iterations = 50000
-    save_interval = 100
+    save_interval = 500
     experiment_name = "dogv2_parkour"  # 修改实验名称
     empirical_normalization = False
     policy = ParkourRslRlPpoActorCriticCfg(

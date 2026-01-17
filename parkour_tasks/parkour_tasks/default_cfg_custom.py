@@ -1,52 +1,25 @@
-"""
-自定义默认配置文件 - 用于dogV2.2.4机器人
-原始文件: default_cfg.py (保留作为参考)
-
-注意：BASE_LINK_NAME 需要根据USD文件中的实际prim路径调整
-- URDF中的link名称: DOGV2_2_4_SLDASM_base_link
-- USD文件中的prim路径可能不同，请在Isaac Sim中检查
-"""
 from isaaclab.scene import InteractiveSceneCfg
 from isaaclab.assets import ArticulationCfg, AssetBaseCfg
-# from isaaclab_assets.robots.unitree import UNITREE_GO2_CFG  # isort: skip  # 原始配置
-from parkour_tasks.custom_robot_cfg import CustomRobotCfg  # isort: skip  # 自定义机器人配置
+from isaaclab_assets.robots.unitree import UNITREE_GO2_CFG  # isort: skip
 import isaaclab.sim as sim_utils
 from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR, ISAACLAB_NUCLEUS_DIR
 from isaaclab.terrains import TerrainImporterCfg
 from isaaclab.utils import configclass
 from parkour_isaaclab.terrains.parkour_terrain_importer import ParkourTerrainImporter
-from parkour_tasks.extreme_parkour_task.config.go2 import agents 
+from parkour_tasks.extreme_parkour_task.config.go2 import agents
 from isaaclab.sensors import RayCasterCameraCfg
 from isaaclab.sensors.ray_caster.patterns import PinholeCameraPatternCfg
 from isaaclab.envs import ViewerCfg
-import os, torch 
+import os, torch
 from parkour_isaaclab.actuators.parkour_actuator_cfg import ParkourDCMotorCfg
 
-# ============================================================================
-# 配置变量：根据USD文件中的实际prim路径调整
-# ============================================================================
-# URDF文件中的link名称是: DOGV2_2_4_SLDASM_base_link
-# 但USD文件中的prim路径可能不同！
-# 
-# 如何检查：
-# 1. 在Isaac Sim中打开USD文件
-# 2. 查看Stage窗口中的prim层级结构
-# 3. 找到base link的实际prim路径
-# 4. 更新下面的 BASE_LINK_NAME
-# ============================================================================
-# 选项1: 如果USD中的prim路径与URDF一致
-BASE_LINK_NAME = "DOGV2_2_4_SLDASM_base_link"
 
-# 选项2: 如果USD中使用简化名称（常见情况）
-# BASE_LINK_NAME = "base"  # 或 "base_link"
+BASE_LINK_NAME = "base_link"
 
-# 选项3: 如果USD中使用根节点名称
-# BASE_LINK_NAME = "DOGV2_2_4_SLDASM"
 
-# 如果不确定，可以先使用 "base" 试试，这是最常见的命名
-# BASE_LINK_NAME = "base"
-
-def quat_from_euler_xyz_tuple(roll: torch.Tensor, pitch: torch.Tensor, yaw: torch.Tensor) -> tuple:
+def quat_from_euler_xyz_tuple(
+    roll: torch.Tensor, pitch: torch.Tensor, yaw: torch.Tensor
+) -> tuple:
     cy = torch.cos(yaw * 0.5)
     sy = torch.sin(yaw * 0.5)
     cr = torch.cos(roll * 0.5)
@@ -58,14 +31,15 @@ def quat_from_euler_xyz_tuple(roll: torch.Tensor, pitch: torch.Tensor, yaw: torc
     qx = cy * sr * cp - sy * cr * sp
     qy = cy * cr * sp + sy * sr * cp
     qz = sy * cr * cp - cy * sr * sp
-    convert = torch.stack([qw, qx, qy, qz], dim=-1) * torch.tensor([1.,1.,1.,-1])
+    convert = torch.stack([qw, qx, qy, qz], dim=-1) * torch.tensor([1.0, 1.0, 1.0, -1])
     return tuple(convert.numpy().tolist())
+
 
 @configclass
 class ParkourDefaultSceneCfg(InteractiveSceneCfg):
-    # 使用自定义机器人配置
-    robot: ArticulationCfg = CustomRobotCfg(prim_path="{ENV_REGEX_NS}/Robot")
-    
+
+    robot: ArticulationCfg = UNITREE_GO2_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")
+
     sky_light = AssetBaseCfg(
         prim_path="/World/skyLight",
         spawn=sim_utils.DomeLightCfg(
@@ -75,7 +49,7 @@ class ParkourDefaultSceneCfg(InteractiveSceneCfg):
     )
 
     terrain = TerrainImporterCfg(
-        class_type= ParkourTerrainImporter,
+        class_type=ParkourTerrainImporter,
         prim_path="/World/ground",
         terrain_type="generator",
         terrain_generator=None,
@@ -94,44 +68,45 @@ class ParkourDefaultSceneCfg(InteractiveSceneCfg):
         ),
         debug_vis=False,
     )
+
     def __post_init__(self):
-        # 注意：自碰撞设置已在CustomRobotCfg中配置为False
-        # 执行器配置已在CustomRobotCfg中完成，使用ImplicitActuatorCfg
-        # 如果需要使用ParkourDCMotorCfg，可以在这里覆盖：
+        # 注意：执行器配置已在CustomRobotCfg中完成
+        # 如果子类（如ParkourTeacherSceneCfg）使用CustomRobotCfg，则不需要在这里覆盖执行器
+        # 如果使用UNITREE_GO2_CFG，则需要在这里配置执行器
         pass
 
+
 ## we are now using a raycaster based camera, not a pinhole camera. see tail issue https://github.com/isaac-sim/IsaacLab/issues/719
-# 注意：使用上面定义的 BASE_LINK_NAME
-CAMERA_CFG = RayCasterCameraCfg( 
-    prim_path= f'{{ENV_REGEX_NS}}/Robot/{BASE_LINK_NAME}',
+CAMERA_CFG = RayCasterCameraCfg(
+    prim_path='{ENV_REGEX_NS}/Robot/base_link',
     data_types=["distance_to_camera"],
     offset=RayCasterCameraCfg.OffsetCfg(
-        pos=(0.33, 0.0, 0.08), 
-        rot=quat_from_euler_xyz_tuple(*tuple(torch.deg2rad(torch.tensor([180,70,-90])))), 
+        pos=(0.31505, 0.0175, 0.023),
+        rot=quat_from_euler_xyz_tuple(*tuple(torch.tensor([0, 0, 0]))),
         convention="ros"
-        ),
-    depth_clipping_behavior = 'max',
-    pattern_cfg = PinholeCameraPatternCfg(
-        focal_length=11.041, 
+    ),
+    depth_clipping_behavior='max',
+    pattern_cfg=PinholeCameraPatternCfg(
+        focal_length=11.041,
         horizontal_aperture=20.955,
-        vertical_aperture = 12.240,
+        vertical_aperture=12.240,
         height=60,
         width=106,
     ),
     mesh_prim_paths=["/World/ground"],
-    max_distance = 2.,
+    max_distance=2.,
 )
 
 CAMERA_USD_CFG = AssetBaseCfg(
-    prim_path=f"{{ENV_REGEX_NS}}/Robot/{BASE_LINK_NAME}/d435",
-    spawn=sim_utils.UsdFileCfg(usd_path=os.path.join(agents.__path__[0],'d435.usd')),
+    prim_path="{ENV_REGEX_NS}/Robot/base_link/d435",
+    spawn=sim_utils.UsdFileCfg(usd_path=os.path.join(agents.__path__[0], 'd435.usd')),
     init_state=AssetBaseCfg.InitialStateCfg(
-            pos=(0.33, 0.0, 0.08), 
-            rot=quat_from_euler_xyz_tuple(*tuple(torch.deg2rad(torch.tensor([180,90,-90]))))
+        pos=(0.31505, 0.0195, 0.023),
+        rot=quat_from_euler_xyz_tuple(*tuple(torch.tensor([0, 0, 0]))),
     )
 )
 VIEWER = ViewerCfg(
     eye=(-0., 2.6, 1.6),
-    asset_name = "robot",
-    origin_type = 'asset_root',
+    asset_name="robot",
+    origin_type='asset_root',
 )
