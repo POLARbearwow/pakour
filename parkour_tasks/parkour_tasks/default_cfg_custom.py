@@ -78,14 +78,14 @@ class ParkourDefaultSceneCfg(InteractiveSceneCfg):
 
 ## we are now using a raycaster based camera, not a pinhole camera. see tail issue https://github.com/isaac-sim/IsaacLab/issues/719
 CAMERA_CFG = RayCasterCameraCfg(
-    prim_path='{ENV_REGEX_NS}/Robot/base_link',
+    prim_path="{ENV_REGEX_NS}/Robot/base_link",
     data_types=["distance_to_camera"],
     offset=RayCasterCameraCfg.OffsetCfg(
         pos=(0.31505, 0.0175, 0.023),
         rot=quat_from_euler_xyz_tuple(*tuple(torch.tensor([0, 0, 0]))),
-        convention="ros"
+        convention="ros",
     ),
-    depth_clipping_behavior='max',
+    depth_clipping_behavior="max",
     pattern_cfg=PinholeCameraPatternCfg(
         focal_length=11.041,
         horizontal_aperture=20.955,
@@ -94,19 +94,20 @@ CAMERA_CFG = RayCasterCameraCfg(
         width=106,
     ),
     mesh_prim_paths=["/World/ground"],
-    max_distance=2.,
+    max_distance=2.0,
 )
 
 CAMERA_USD_CFG = AssetBaseCfg(
     prim_path="{ENV_REGEX_NS}/Robot/base_link/d435",
-    spawn=sim_utils.UsdFileCfg(usd_path=os.path.join(agents.__path__[0], 'd435.usd')),
+    spawn=sim_utils.UsdFileCfg(usd_path=os.path.join(agents.__path__[0], "d435.usd")),
     init_state=AssetBaseCfg.InitialStateCfg(
         pos=(0.31505, 0.0195, 0.023),
         rot=quat_from_euler_xyz_tuple(*tuple(torch.tensor([0, 0, 0]))),
-    )
+    ),
 )
 VIEWER = ViewerCfg(
-    eye=(-0., 2.6, 1.6),
-    asset_name="robot",
-    origin_type='asset_root',
+    eye=(-0.0, 2.6, 1.6),
+    # asset_name="robot",
+    # origin_type="asset_root",
+    origin_type="world",
 )

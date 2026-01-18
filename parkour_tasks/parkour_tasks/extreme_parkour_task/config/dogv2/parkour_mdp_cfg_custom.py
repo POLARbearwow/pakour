@@ -7,6 +7,7 @@
 2. 更新身体名称匹配规则（.*_Foot_link, .*base_link, .*HipF_link, .*Knee_link）
 实际body名称: ['base_link', 'LF_HipA_link', 'LF_HipF_link', 'LF_Knee_link', 'LF_Foot_link', ...]
 """
+
 from isaaclab.managers import EventTermCfg as EventTerm
 from isaaclab.managers import ObservationGroupCfg as ObsGroup
 from isaaclab.managers import ObservationTermCfg as ObsTerm
@@ -14,15 +15,22 @@ from isaaclab.managers import RewardTermCfg as RewTerm
 from isaaclab.managers import SceneEntityCfg
 from isaaclab.managers import TerminationTermCfg as DoneTerm
 from isaaclab.utils import configclass
-from isaaclab.envs.mdp.events import ( 
-randomize_rigid_body_mass,
-apply_external_force_torque,
-reset_joints_by_scale
-
+from isaaclab.envs.mdp.events import (
+    randomize_rigid_body_mass,
+    apply_external_force_torque,
+    reset_joints_by_scale,
 )
 from isaaclab.envs.mdp.rewards import undesired_contacts
-from parkour_isaaclab.envs.mdp.parkour_actions import DelayedJointPositionActionCfg 
-from parkour_isaaclab.envs.mdp import terminations, rewards, parkours, events, observations, parkour_commands
+from parkour_isaaclab.envs.mdp.parkour_actions import DelayedJointPositionActionCfg
+from parkour_isaaclab.envs.mdp import (
+    terminations,
+    rewards,
+    parkours,
+    events,
+    observations,
+    parkour_commands,
+)
+
 
 @configclass
 class CommandsCfg:
@@ -30,24 +38,25 @@ class CommandsCfg:
 
     base_velocity = parkour_commands.ParkourCommandCfg(
         asset_name="robot",
-        resampling_time_range=(6.0,6.0 ),
+        resampling_time_range=(6.0, 6.0),
         heading_control_stiffness=0.8,
         ranges=parkour_commands.ParkourCommandCfg.Ranges(
-            lin_vel_x=(0.3, 0.8), 
-            heading=(-1.6, 1.6)
+            lin_vel_x=(0.3, 0.8), heading=(-1.6, 1.6)
         ),
-        clips= parkour_commands.ParkourCommandCfg.Clips(
-            lin_vel_clip = 0.2,
-            ang_vel_clip = 0.4
-        )
+        clips=parkour_commands.ParkourCommandCfg.Clips(
+            lin_vel_clip=0.2, ang_vel_clip=0.4
+        ),
     )
+
 
 @configclass
 class ParkourEventsCfg:
     """Command specifications for the MDP."""
+
     base_parkour = parkours.ParkourEventsCfg(
-        asset_name = 'robot',
-        )
+        asset_name="robot",
+    )
+
 
 @configclass
 class TeacherObservationsCfg:
@@ -56,18 +65,23 @@ class TeacherObservationsCfg:
     @configclass
     class PolicyCfg(ObsGroup):
         """Observations for policy group."""
+
         # observation terms (order preserved)
         extreme_parkour_observations = ObsTerm(
             func=observations.ExtremeParkourObservations,
-            params={            
-            "asset_cfg":SceneEntityCfg("robot"),
-            "sensor_cfg":SceneEntityCfg("contact_forces", body_names=".*_Foot_link"),  # 修改：匹配Foot_link
-            "parkour_name":'base_parkour',
-            "history_length": 10
+            params={
+                "asset_cfg": SceneEntityCfg("robot"),
+                "sensor_cfg": SceneEntityCfg(
+                    "contact_forces", body_names=".*_Foot_link"
+                ),  # 修改：匹配Foot_link
+                "parkour_name": "base_parkour",
+                "history_length": 10,
             },
-            clip= (-100,100)
+            clip=(-100, 100),
         )
+
     policy: PolicyCfg = PolicyCfg()
+
 
 @configclass
 class StudentObservationsCfg:
@@ -75,38 +89,39 @@ class StudentObservationsCfg:
     @configclass
     class PolicyCfg(ObsGroup):
         """Observations for policy group."""
+
         extreme_parkour_observations = ObsTerm(
             func=observations.ExtremeParkourObservations,
-            params={            
-            "asset_cfg":SceneEntityCfg("robot"),
-            "sensor_cfg":SceneEntityCfg("contact_forces", body_names=".*_Foot_link"),  # 修改：匹配Foot_link
-            "parkour_name":'base_parkour',
-            "history_length": 10,
+            params={
+                "asset_cfg": SceneEntityCfg("robot"),
+                "sensor_cfg": SceneEntityCfg(
+                    "contact_forces", body_names=".*_Foot_link"
+                ),  # 修改：匹配Foot_link
+                "parkour_name": "base_parkour",
+                "history_length": 10,
             },
-            clip= (-100,100)
+            clip=(-100, 100),
         )
 
     @configclass
     class DepthCameraPolicyCfg(ObsGroup):
         depth_cam = ObsTerm(
             func=observations.image_features,
-            params={            
-            "sensor_cfg":SceneEntityCfg("depth_camera"),
-            "resize": (58, 87),
-            "buffer_len": 2,
-            "debug_vis":True
+            params={
+                "sensor_cfg": SceneEntityCfg("depth_camera"),
+                "resize": (58, 87),
+                "buffer_len": 2,
+                "debug_vis": True,
             },
         )
 
     @configclass
     class DeltaYawOkPolicyCfg(ObsGroup):
-        deta_yaw_ok =  ObsTerm(
+        deta_yaw_ok = ObsTerm(
             func=observations.obervation_delta_yaw_ok,
-            params={            
-            "parkour_name":'base_parkour',
-            'threshold': 0.6
-            },
+            params={"parkour_name": "base_parkour", "threshold": 0.6},
         )
+
     policy: PolicyCfg = PolicyCfg()
     depth_camera: DepthCameraPolicyCfg = DepthCameraPolicyCfg()
     delta_yaw_ok: DeltaYawOkPolicyCfg = DeltaYawOkPolicyCfg()
@@ -115,160 +130,173 @@ class StudentObservationsCfg:
 @configclass
 class StudentRewardsCfg:
     reward_collision = RewTerm(
-        func=rewards.reward_collision, 
-        weight=-0., 
+        func=rewards.reward_collision,
+        weight=-0.0,
         params={
             # 修改：匹配dogV2的身体名称（HipF_link, Knee_link, base_link）
-            "sensor_cfg":SceneEntityCfg("contact_forces", body_names=[".*base_link",".*HipF_link",".*Knee_link"]),
+            "sensor_cfg": SceneEntityCfg(
+                "contact_forces",
+                body_names=[".*base_link", ".*HipF_link", ".*Knee_link"],
+            ),
         },
     )
-    
+
 
 @configclass
 class TeacherRewardsCfg:
     """Reward terms for the MDP.
     实际body名称: ['base_link', 'LF_HipA_link', 'LF_HipF_link', 'LF_Knee_link', 'LF_Foot_link', ...]
     """
-# Available Body strings: 
+
+    # Available Body strings:
     reward_collision = RewTerm(
-        func=rewards.reward_collision, 
-        weight=-10., 
+        func=rewards.reward_collision,
+        weight=-10.0,
         params={
             # 修改：匹配dogV2的身体名称（HipF_link, Knee_link, base_link）
-            "sensor_cfg":SceneEntityCfg("contact_forces", body_names=[".*base_link",".*HipF_link",".*Knee_link"]),
+            "sensor_cfg": SceneEntityCfg(
+                "contact_forces",
+                body_names=[".*base_link", ".*HipF_link", ".*Knee_link"],
+            ),
         },
     )
     reward_feet_edge = RewTerm(
-        func=rewards.reward_feet_edge, 
-        weight=-1.0, 
+        func=rewards.reward_feet_edge,
+        weight=-1.0,
         params={
             # 修改：匹配dogV2的脚部名称（注意顺序：LF, LR, RF, RR）
-            "asset_cfg":SceneEntityCfg(name="robot", body_names=["LF_Foot_link","LR_Foot_link","RF_Foot_link","RR_Foot_link"]),
-            "sensor_cfg":SceneEntityCfg(name="contact_forces", body_names=".*_Foot_link"),
-            "parkour_name":'base_parkour',
+            "asset_cfg": SceneEntityCfg(
+                name="robot",
+                body_names=[
+                    "LF_Foot_link",
+                    "LR_Foot_link",
+                    "RF_Foot_link",
+                    "RR_Foot_link",
+                ],
+            ),
+            "sensor_cfg": SceneEntityCfg(
+                name="contact_forces", body_names=".*_Foot_link"
+            ),
+            "parkour_name": "base_parkour",
         },
     )
     reward_torques = RewTerm(
-        func=rewards.reward_torques, 
-        weight=-0.00001, 
+        func=rewards.reward_torques,
+        weight=-0.00001,
         params={
-            "asset_cfg":SceneEntityCfg("robot"),
+            "asset_cfg": SceneEntityCfg("robot"),
         },
     )
     reward_dof_error = RewTerm(
-        func=rewards.reward_dof_error, 
-        weight=-0.04, 
+        func=rewards.reward_dof_error,
+        weight=-0.04,
         params={
-            "asset_cfg":SceneEntityCfg("robot"),
+            "asset_cfg": SceneEntityCfg("robot"),
         },
     )
     reward_hip_pos = RewTerm(
-        func=rewards.reward_hip_pos, 
-        weight=-0.5, 
+        func=rewards.reward_hip_pos,
+        weight=-0.5,
         params={
             # 修改：匹配dogV2的髋关节名称
-            "asset_cfg":SceneEntityCfg("robot", joint_names=".*_HipA_joint|.*_HipF_joint"),
+            "asset_cfg": SceneEntityCfg(
+                "robot", joint_names=".*_HipA_joint|.*_HipF_joint"
+            ),
         },
     )
     reward_ang_vel_xy = RewTerm(
-        func=rewards.reward_ang_vel_xy, 
-        weight=-0.05, 
+        func=rewards.reward_ang_vel_xy,
+        weight=-0.05,
         params={
-            "asset_cfg":SceneEntityCfg("robot"),
+            "asset_cfg": SceneEntityCfg("robot"),
         },
     )
     reward_action_rate = RewTerm(
-        func=rewards.reward_action_rate, 
-        weight=-0.1, 
+        func=rewards.reward_action_rate,
+        weight=-0.1,
         params={
-          "asset_cfg":SceneEntityCfg("robot"),
+            "asset_cfg": SceneEntityCfg("robot"),
         },
     )
     reward_dof_acc = RewTerm(
-        func=rewards.reward_dof_acc, 
-        weight=-2.5e-7, 
+        func=rewards.reward_dof_acc,
+        weight=-2.5e-7,
         params={
-            "asset_cfg":SceneEntityCfg("robot"),
+            "asset_cfg": SceneEntityCfg("robot"),
         },
     )
     reward_lin_vel_z = RewTerm(
-        func=rewards.reward_lin_vel_z, 
-        weight=-1.0, 
+        func=rewards.reward_lin_vel_z,
+        weight=-1.0,
         params={
-            "asset_cfg":SceneEntityCfg("robot"),
-            "parkour_name":'base_parkour',
+            "asset_cfg": SceneEntityCfg("robot"),
+            "parkour_name": "base_parkour",
         },
     )
     reward_orientation = RewTerm(
-        func=rewards.reward_orientation, 
-        weight=-1.0, 
+        func=rewards.reward_orientation,
+        weight=-1.0,
         params={
-            "asset_cfg":SceneEntityCfg("robot"),
-            "parkour_name":'base_parkour',
+            "asset_cfg": SceneEntityCfg("robot"),
+            "parkour_name": "base_parkour",
         },
     )
     reward_feet_stumble = RewTerm(
-        func=rewards.reward_feet_stumble, 
-        weight=-1.0, 
+        func=rewards.reward_feet_stumble,
+        weight=-1.0,
         params={
             # 修改：匹配Foot_link
-            "sensor_cfg":SceneEntityCfg("contact_forces", body_names=".*_Foot_link"),
+            "sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*_Foot_link"),
         },
     )
     reward_tracking_goal_vel = RewTerm(
-        func=rewards.reward_tracking_goal_vel, 
-        weight=1.5, 
-        params={
-            "asset_cfg":SceneEntityCfg("robot"),
-            "parkour_name":'base_parkour'
-        },
+        func=rewards.reward_tracking_goal_vel,
+        weight=1.5,
+        params={"asset_cfg": SceneEntityCfg("robot"), "parkour_name": "base_parkour"},
     )
     reward_tracking_yaw = RewTerm(
-        func=rewards.reward_tracking_yaw, 
-        weight=0.5, 
-        params={
-            "asset_cfg":SceneEntityCfg("robot"),
-            "parkour_name":'base_parkour'
-        },
+        func=rewards.reward_tracking_yaw,
+        weight=0.5,
+        params={"asset_cfg": SceneEntityCfg("robot"), "parkour_name": "base_parkour"},
     )
     reward_delta_torques = RewTerm(
-        func=rewards.reward_delta_torques, 
-        weight=-1.0e-7, 
+        func=rewards.reward_delta_torques,
+        weight=-1.0e-7,
         params={
-            "asset_cfg":SceneEntityCfg("robot"),
+            "asset_cfg": SceneEntityCfg("robot"),
         },
     )
+
 
 @configclass
 class TerminationsCfg:
     """Termination terms for the MDP."""
 
     total_terminates = DoneTerm(
-        func=terminations.terminate_episode, 
+        func=terminations.terminate_episode,
         time_out=True,
-        params= {
-            "asset_cfg":SceneEntityCfg("robot")
-        },
+        params={"asset_cfg": SceneEntityCfg("robot")},
     )
-    
+
+
 @configclass
 class EventCfg:
     ### Modified origin events, plz see relative issue https://github.com/isaac-sim/IsaacLab/issues/1955
     """Configuration for events."""
     reset_root_state = EventTerm(
-        func= events.reset_root_state,
-        params = {'offset': 3.},
+        func=events.reset_root_state,
+        params={"offset": 3.0},
         mode="reset",
     )
     reset_robot_joints = EventTerm(
-        func= reset_joints_by_scale, 
+        func=reset_joints_by_scale,
         params={
             "position_range": (0.95, 1.05),
             "velocity_range": (0.0, 0.0),
         },
         mode="reset",
     )
-    physics_material = EventTerm( # Okay
+    physics_material = EventTerm(  # Okay
         func=events.randomize_rigid_body_material,
         mode="startup",
         params={
@@ -279,35 +307,36 @@ class EventCfg:
     )
 
     randomize_rigid_body_mass = EventTerm(
-        func= randomize_rigid_body_mass,
+        func=randomize_rigid_body_mass,
         mode="startup",
         params={
             "asset_cfg": SceneEntityCfg("robot", body_names="base_link"),
-            "mass_distribution_params": (-1., 3.0),
+            "mass_distribution_params": (-1.0, 3.0),
             "operation": "add",
-            },
+        },
     )
     randomize_rigid_body_com = EventTerm(
-        func= events.randomize_rigid_body_com,
+        func=events.randomize_rigid_body_com,
         mode="startup",
         params={
             "asset_cfg": SceneEntityCfg("robot", body_names="base_link"),
-            "com_range": {'x':(-0.02, 0.02),'y':(-0.02, 0.02),'z':(-0.02, 0.02)}
-            },
+            "com_range": {"x": (-0.02, 0.02), "y": (-0.02, 0.02), "z": (-0.02, 0.02)},
+        },
     )
     random_camera_position = EventTerm(
-        func= events.random_camera_position,
+        func=events.random_camera_position,
         mode="startup",
-        params={'sensor_cfg':SceneEntityCfg("depth_camera"),
-                'rot_noise_range': {'pitch':(-5, 5)},
-                'convention':'ros',
-                },
+        params={
+            "sensor_cfg": SceneEntityCfg("depth_camera"),
+            "rot_noise_range": {"pitch": (-5, 5)},
+            "convention": "ros",
+        },
     )
-    push_by_setting_velocity = EventTerm( # Okay
-        func = events.push_by_setting_velocity, 
-        params={'velocity_range':{"x":(-0.5, 0.5), "y":(-0.5, 0.5)}},
-        interval_range_s = (8. ,8. ),
-        is_global_time= True, 
+    push_by_setting_velocity = EventTerm(  # Okay
+        func=events.push_by_setting_velocity,
+        params={"velocity_range": {"x": (-0.5, 0.5), "y": (-0.5, 0.5)}},
+        interval_range_s=(8.0, 8.0),
+        is_global_time=True,
         mode="interval",
     )
     base_external_force_torque = EventTerm(  # Okay
@@ -320,16 +349,17 @@ class EventCfg:
         },
     )
 
+
 @configclass
 class ActionsCfg:
     joint_pos = DelayedJointPositionActionCfg(
-        asset_name="robot", 
-        joint_names=[".*"], 
-        scale=0.25, 
+        asset_name="robot",
+        joint_names=[".*"],
+        scale=0.25,
         use_default_offset=True,
-        action_delay_steps = [1, 1],
-        delay_update_global_steps = 24 * 8000,
-        history_length = 8,
-        use_delay = True,
-        clip = {'.*': (-4.8,4.8)}
-        )
+        action_delay_steps=[1, 1],
+        delay_update_global_steps=24 * 8000,
+        history_length=8,
+        use_delay=True,
+        clip={".*": (-4.8, 4.8)},
+    )

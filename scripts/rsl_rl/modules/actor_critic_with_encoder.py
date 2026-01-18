@@ -46,12 +46,12 @@ class Actor(nn.Module):
         state_history_encoder_cfg = kwargs.pop('state_history_encoder')
         state_histroy_encoder_class = eval(state_history_encoder_cfg.pop('class_name'))
         self.history_encoder: StateHistoryEncoder = state_histroy_encoder_class(
-                                                            activation, 
-                                                            num_prop, 
-                                                            num_hist, 
-                                                            priv_encoder_output_dim,
-                                                            state_history_encoder_cfg.pop('channel_size')
-                                                            )
+                                    activation, 
+                                    num_prop, 
+                                    num_hist, 
+                                    priv_encoder_output_dim,
+                                    state_history_encoder_cfg.pop('channel_size')
+                                    )
         if self.if_scan_encode:
             scan_encoder = []
             scan_encoder.append(nn.Linear(num_scan, scan_encoder_dims[0]))

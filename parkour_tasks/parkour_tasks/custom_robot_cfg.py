@@ -15,10 +15,6 @@ import os
 from parkour_isaaclab.actuators.parkour_actuator_cfg import ParkourDCMotorCfg
 
 
-# 获取项目根目录
-# 此文件位于: parkour_tasks/parkour_tasks/custom_robot_cfg.py
-# 项目根目录应该是: /home/ares/IsaacLab/Isaaclab_Parkour
-# 从 parkour_tasks/parkour_tasks/ 向上两级到项目根目录
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
 
 # USD文件路径

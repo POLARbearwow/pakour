@@ -3,9 +3,6 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
-"""Configurations for dogV2.2.4 robot parkour environments.
-原始配置在 ../go2/ 目录下，保留作为参考
-"""
 
 import gymnasium as gym
 
