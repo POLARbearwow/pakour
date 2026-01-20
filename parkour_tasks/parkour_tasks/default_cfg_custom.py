@@ -92,7 +92,7 @@ CAMERA_CFG = RayCasterCameraCfg(
     data_types=["distance_to_camera"],
     offset=RayCasterCameraCfg.OffsetCfg(
         pos=(0.31505, 0.00, 0.023),
-        rot=quat_from_euler_xyz_tuple(*tuple(torch.tensor([0, 1.57, -1.57]))),
+        rot=quat_from_euler_xyz_tuple(*tuple(torch.tensor([0, 1.92, -1.57]))),
         convention="ros",
     ),
     depth_clipping_behavior="max",

@@ -338,6 +338,25 @@ python scripts/rsl_rl/play.py \
 - **Eval-v0：** 用于评估性能（中等环境数、禁用随机化）
 - **Play-v0：** 用于可视化展示（少量环境、高难度、长 episode）
 
+### 错误 5：Debug模式下slope地形不显示
+- **问题：** 使用 `--debug` 参数时，slope地形（parkour_slope）不出现
+- **原因：** Debug模式下 `num_cols=5`，而slope地形的比例范围是0.85-1.0，需要至少7列才能显示
+- **解决：** 已在 `scripts/rsl_rl/train.py` 中修复，debug模式下自动设置为8列（为未来可能新增的地形类型预留空间）
+
+### 错误 6：Evaluation脚本找不到checkpoint文件
+- **问题：** 使用 `--checkpoint model_5500.pt` 时提示文件未找到
+- **解决：** 使用完整路径或相对路径：
+  ```bash
+  # 使用相对路径（推荐）
+  python scripts/rsl_rl/evaluation.py \
+      --task Isaac-Extreme-Parkour-Teacher-DogV2-Eval-v0 \
+      --num_envs 16 \
+      --checkpoint logs/rsl_rl/dogv2_parkour/2026-01-20_18-20-56/model_5500.pt
+  
+  # 或使用绝对路径
+  --checkpoint /home/ares/IsaacLab/Isaaclab_Parkour/logs/rsl_rl/dogv2_parkour/2026-01-20_18-20-56/model_5500.pt
+  ```
+
 ---
 
 ## 📁 相关配置文件
@@ -365,6 +384,55 @@ parkour_tasks/parkour_tasks/extreme_parkour_task/config/dogv2/
 parkour_isaaclab/terrains/extreme_parkour/config/
 └── parkour.py                              # 地形类型和比例配置
 ```
+
+#### 地形类型说明
+- **parkour_gap**: 间隙地形（15%）
+- **parkour_hurdle**: 跨栏地形（20%）
+- **parkour_flat**: 平坦跨栏地形（20%）
+- **parkour_step**: 台阶地形（15%）
+- **parkour**: 复杂障碍地形（15%）
+- **parkour_slope**: 斜坡地形（15%）- 前进方向的上坡/下坡
+- **parkour_demo**: 演示地形（0%，已禁用）
+
+#### 修改斜坡坡度
+斜坡的坡度在 `parkour.py` 文件的 `parkour_slope` 配置中修改：
+
+```python
+"parkour_slope": ExtremeParkourSlopeTerrainCfg(
+    proportion=0.15,
+    apply_roughness=True,
+    x_range=(1.0, 2.0),
+    half_valid_width=(0.5, 1.0),
+    slope_range="-0.15 - 0.05 * difficulty, 0.15 + 0.05 * difficulty",  # ← 修改这里
+    segment_width_range="0.8 + 0.2 * difficulty, 1.6 + 0.4 * difficulty",
+    noise_range=(0.01, 0.05),
+),
+```
+
+**参数说明：**
+- `slope_range`: 斜率范围（单位：米高度/米前进方向）
+  - 格式：`"最小值, 最大值"`，支持使用 `difficulty` 变量
+  - 正值 = 上坡，负值 = 下坡
+  - 当前值：`"-0.15 - 0.05 * difficulty, 0.15 + 0.05 * difficulty"`
+    - difficulty=0 时：-0.15 到 0.15（约 ±8.5°）
+    - difficulty=1 时：-0.2 到 0.2（约 ±11.3°）
+
+**修改示例：**
+```python
+# 更陡的坡度（±30度左右）
+slope_range="-0.5 - 0.1 * difficulty, 0.5 + 0.1 * difficulty"
+
+# 固定坡度（不随难度变化）
+slope_range="-0.2, 0.2"
+
+# 只有上坡
+slope_range="0.1, 0.3"
+
+# 只有下坡
+slope_range="-0.3, -0.1"
+```
+
+**注意：** 斜坡方向已修复为在机器人前进方向（x方向）上变化，不再是左右倾斜。
 
 ---
 
@@ -399,7 +467,19 @@ python scripts/rsl_rl/train.py \
     --num_envs 64  # 最少64个环境
 ```
 
-### 启用可视化调试
+### 启用可视化调试（Debug模式）
+使用 `--debug` 参数可以：
+- 自动减少环境数到64（确保是4的倍数）
+- 设置地形为5行×8列（确保所有地形类型都能显示，包括slope，并为未来新增类型预留空间）
+- 切换到tensorboard日志（禁用wandb以节省内存）
+
+```bash
+python scripts/rsl_rl/train.py \
+    --task Isaac-Extreme-Parkour-Teacher-DogV2-v0 \
+    --debug
+```
+
+### 启用可视化调试（Eval配置）
 ```bash
 python scripts/rsl_rl/train.py \
     --task Isaac-Extreme-Parkour-Teacher-DogV2-Eval-v0 \
@@ -418,13 +498,48 @@ logs/rsl_rl/dogv2_parkour/<timestamp>/params/
 
 ---
 
+## ⚙️ 重要配置说明
+
+### Teacher动作延迟（Delay）设置
+
+Teacher策略默认**不启用**动作延迟：
+
+**配置文件：** `parkour_tasks/parkour_tasks/extreme_parkour_task/config/dogv2/parkour_teacher_cfg_custom.py`
+
+```python
+def __post_init__(self):
+    # ...
+    self.actions.joint_pos.use_delay = False  # Teacher不使用delay
+    self.actions.joint_pos.history_length = 1
+```
+
+**对比：**
+- **Teacher**: `use_delay = False`, `history_length = 1`
+- **Student**: `use_delay = True`, `history_length = 8`
+
+如果需要为Teacher启用delay，修改上述配置即可。
+
+### 斜坡地形修复说明
+
+**修复内容：**
+1. **方向修复**：斜坡从左右倾斜（y方向）改为前进方向（x方向）的上坡/下坡
+2. **Debug模式修复**：Debug模式下 `num_cols` 从5改为7，确保slope地形能正常显示
+
+**相关文件：**
+- `parkour_isaaclab/terrains/extreme_parkour/extreme_parkour_terrians.py` - 斜坡生成函数
+- `parkour_isaaclab/terrains/extreme_parkour/extreme_parkour_terrains_cfg.py` - 斜坡配置类
+- `scripts/rsl_rl/train.py` - Debug模式配置
+
+---
+
 ## 📞 技术支持
 
 如有问题，请检查：
 1. 配置文件是否正确修改
 2. 任务名称是否拼写正确
-3. checkpoint 路径是否存在
+3. checkpoint 路径是否存在（使用完整路径）
 4. GPU 内存是否足够
+5. Debug模式下是否能看到所有地形类型（包括slope）
 
 相关文档：
 - [Isaac Lab 官方文档](https://isaac-sim.github.io/IsaacLab/)

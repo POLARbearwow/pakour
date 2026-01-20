@@ -89,7 +89,7 @@ class UnitreeGo2StudentParkourEnvCfg_EVAL(UnitreeGo2StudentParkourEnvCfg):
 
         if self.scene.terrain.terrain_generator is not None:
             self.scene.terrain.terrain_generator.num_rows = 5
-            self.scene.terrain.terrain_generator.num_cols = 5
+            self.scene.terrain.terrain_generator.num_cols = 8
             self.scene.terrain.terrain_generator.random_difficulty = True
             self.scene.terrain.terrain_generator.difficulty_range = (0.0,1.0)
         self.events.randomize_rigid_body_com = None

@@ -187,6 +187,7 @@ def main(
                 )
             env_cfg.scene.num_envs = num_envs
         # 3. 设置地形行数和列数为较小值
+        # 注意: num_cols设置为8列以确保所有地形类型都能显示，并为未来可能新增的地形类型预留空间
         if hasattr(env_cfg.scene, "terrain") and hasattr(
             env_cfg.scene.terrain, "terrain_generator"
         ):
@@ -194,8 +195,10 @@ def main(
                 env_cfg.scene.terrain.terrain_generator.num_rows = 5
                 print(f"[DEBUG] Set terrain num_rows to 5")
             if hasattr(env_cfg.scene.terrain.terrain_generator, "num_cols"):
-                env_cfg.scene.terrain.terrain_generator.num_cols = 5
-                print(f"[DEBUG] Set terrain num_cols to 5")
+                env_cfg.scene.terrain.terrain_generator.num_cols = 8
+                print(
+                    f"[DEBUG] Set terrain num_cols to 8 (确保所有地形类型都能显示，包括未来可能新增的类型)"
+                )
     else:
         env_cfg.scene.num_envs = (
             args_cli.num_envs

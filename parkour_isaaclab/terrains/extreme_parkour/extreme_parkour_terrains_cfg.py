@@ -100,15 +100,15 @@ class ExtremeParkourHurdleTriMeshTerrainCfg(ExtremeParkourRoughTerrainCfg):
 @configclass
 class ExtremeParkourSlopeTerrainCfg(ExtremeParkourRoughTerrainCfg):
     """
-    侧向进入斜坡地形：
-    - 地面整体是左右倾斜的"斜坡带"
-    - 机器人沿 x 方向前进，沿着等高线行走，不直接爬坡
+    前进方向斜坡地形：
+    - 地面在机器人前进方向（x方向）上倾斜
+    - 机器人沿 x 方向前进，直接爬坡或下坡
     - 多个斜坡段在 x 方向串联，每段斜率与长度都从范围中采样
     """
 
     function = extreme_parkour_terrians.parkour_slope_terrain
 
-    # 斜率范围（单位：m 高度 / m 横向），允许正负，难度越高斜率范围略扩大
+    # 斜率范围（单位：m 高度 / m 前进方向），正值为上坡，负值为下坡，难度越高斜率范围略扩大
     # 例如 difficulty=1 时，大约在 [-0.2, 0.2] 左右
     slope_range: str = "-0.15 - 0.05 * difficulty, 0.15 + 0.05 * difficulty"
 

@@ -42,7 +42,7 @@ EXTREME_PARKOUR_TERRAINS_CFG = ParkourTerrainGeneratorCfg(
             apply_roughness=True,
             x_range=(0.5, 0.8),
             half_valid_width=(0.5, 1),
-            step_height="0.15 + 0.15*difficulty",
+            step_height="0.15 + 0.1*difficulty",
         ),
         "parkour": ExtremeParkourTerrainCfg(
             proportion=0.15,
@@ -58,7 +58,7 @@ EXTREME_PARKOUR_TERRAINS_CFG = ParkourTerrainGeneratorCfg(
             apply_roughness=True,
             x_range=(1.0, 2.0),
             half_valid_width=(0.5, 1.0),
-            slope_range="-0.15 - 0.05 * difficulty, 0.15 + 0.05 * difficulty",
+            slope_range="-0.2 - 0.1 * difficulty, 0.2 + 0.1 * difficulty",
             segment_width_range="0.8 + 0.2 * difficulty, 1.6 + 0.4 * difficulty",
             noise_range=(0.01, 0.05),
         ),
