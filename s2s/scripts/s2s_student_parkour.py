@@ -682,3 +682,4 @@ if __name__ == "__main__":
         exit(1)
 
     run_mujoco_student(policy_session, depth_encoder_session, StudentSim2simCfg())
+x

@@ -1,109 +1,268 @@
-# Student策略Sim2Sim实现
+# Parkour机器人脚本使用指南
 
-## 文件说明
+本目录包含两个主要脚本，用于Parkour机器人的仿真和控制。
 
-`s2s_student_parkour.py` - Student策略的Sim2Sim实现，用于在MuJoCo环境中运行训练好的student策略模型。
+## 📁 脚本说明
 
-## 主要特性
+### 1. `visualize_raycaster.py` - 基础可视化脚本
 
-1. **Observation映射**: 正确映射MuJoCo的关节顺序到Isaac Lab的Policy顺序
-2. **Depth Camera支持**: 集成depth camera传感器数据（使用ray caster插件）
-3. **完整的Observation构造**: 包括extreme_parkour_observations、depth camera和delta_yaw_ok
+**功能：**
+- ✅ Raycaster深度相机可视化
+- ✅ 3D场景显示（机器人、地形、射线）
+- ✅ 传感器数据诊断
 
-## Observation结构
+**使用场景：**
+- 测试raycaster配置
+- 验证相机安装位置
+- 检查射线可视化效果
 
-Student策略使用**两个独立的ONNX模型**：
-
-### 1. Policy模型 (policy.onnx)
-**输入**：
-- `obs`: 753维
-  - num_prop (53维): obs_buf - 角速度、IMU、delta_yaw、commands、关节位置/速度、动作历史、contact
-  - num_scan (132维): measured_heights - 高度扫描数据（**会被depth_latent替换**）
-  - num_priv_explicit (9维): 显式特权信息
-  - num_priv_latent (29维): 隐式特权信息
-  - num_hist (530维): 10帧历史obs_buf (10 × 53)
-- `scandots_latent`: 32维 - 从depth_encoder得到的depth_latent（替换scan部分）
-
-**输出**：
-- `actions`: 12维动作
-
-### 2. Depth Encoder模型 (depth_latest.onnx)
-**输入**：
-- `depth_image`: (1, 87, 58) - depth camera图像
-- `proprioception`: (1, 53) - obs的前53维（num_prop），但delta_yaw部分设为0
-
-**输出**：
-- `depth_latent_and_yaw`: (depth_latent_dim + 2)
-  - depth_latent: 32维（用于替换policy输入中的scan部分）
-  - yaw: 2维（用于更新obs中的delta_yaw部分）
-
-### 推理流程
-
-1. 每5步更新一次depth_encoder
-2. depth_encoder处理depth_image和proprioception，得到depth_latent和yaw
-3. 用yaw更新obs中的delta_yaw部分（obs[:, 6:8] = 1.5 * yaw）
-4. policy使用obs（753维）和depth_latent（32维，替换scan部分）进行推理
-
-## 使用方法
-
+**运行方式：**
 ```bash
-cd s2s/scripts
-python s2s_student_parkour.py \
-    --policy_model /path/to/policy.onnx \
-    --depth_model /path/to/depth_latest.onnx
+python s2s/scripts/visualize_raycaster.py
 ```
 
-例如：
+**无需额外参数**，脚本会自动：
+- 加载raycaster插件
+- 初始化传感器
+- 显示3D场景和射线
+
+---
+
+### 2. `parkour_with_policy.py` - 完整控制脚本
+
+**功能：**
+- ✅ Raycaster深度相机可视化
+- ✅ Joystick手柄控制
+- ✅ ONNX策略推理（可选）
+- ✅ PD控制保持站立
+- ✅ 实时状态显示
+
+**使用场景：**
+- 用手柄控制机器人行走
+- 运行训练好的策略模型
+- 在Parkour地形上测试
+
+**运行方式：**
+
+#### 方式1: 仅PD控制 + 手柄（无需模型）
 ```bash
-python s2s_student_parkour.py \
-    --policy_model ../../logs/rsl_rl/dogv2_parkour/2026-01-21_06-17-52/exported_deploy/policy.onnx \
-    --depth_model ../../logs/rsl_rl/dogv2_parkour/2026-01-21_06-17-52/exported_deploy/depth_latest.onnx
+python s2s/scripts/parkour_with_policy.py
 ```
 
-## 配置说明
+#### 方式2: 策略控制 + 手柄（需要ONNX模型）
+```bash
+python s2s/scripts/parkour_with_policy.py --load_model /path/to/your/model.onnx
+```
 
-主要配置在`StudentSim2simCfg`类中：
+#### 方式3: 必须使用策略模型（没有模型时退出）
+```bash
+python s2s/scripts/parkour_with_policy.py --load_model /path/to/model.onnx --require_model
+```
 
-- `sim_config.mujoco_model_path`: MuJoCo模型路径
-- `sim_config.plugin_lib_path`: Ray caster插件路径
-- `env.depth_image_size`: Depth camera图像尺寸 (58, 87)
-- `env.frame_stack`: 历史帧数 (10)
-- `env.depth_buffer_len`: Depth buffer长度 (2)
+---
 
-## 注意事项
+## 🎮 手柄控制说明
 
-1. **两个ONNX模型**: Student策略需要两个独立的ONNX模型：
-   - `policy.onnx`: 处理observation和depth_latent
-   - `depth_latest.onnx`: 处理depth image和proprioception
+**支持的手柄：** Xbox / PlayStation / 通用USB手柄
 
-2. **关节顺序映射**: 代码中已经处理了MuJoCo和Isaac Lab之间的关节顺序差异
+**控制映射：**
+- **左摇杆上下**：前进/后退 (速度上限: 2.0 m/s)
+- **左摇杆左右**：左右平移 (速度上限: 1.0 m/s)
+- **右摇杆左右**：原地旋转 (速度上限: 1.5 rad/s)
 
-3. **Depth Camera**: 需要正确配置ray caster插件和传感器
+**手柄设备路径：** `/dev/input/js0`
 
-4. **Depth Encoder更新频率**: depth_encoder每5步更新一次（类似Isaac Lab）
+**如果没有手柄：**
+脚本会提示"将以键盘模式运行"，但仍可以查看可视化效果。
 
-5. **Yaw更新**: depth_encoder输出的yaw用于更新obs中的delta_yaw部分（obs[:, 6:8] = 1.5 * yaw）
+---
 
-6. **Parkour状态**: 目前使用简化的parkour状态，实际应用时可能需要更复杂的实现
+## 🖥️ Viewer操作指南
 
-7. **Privileged信息**: 目前返回零数组，实际应用时应该从机器人状态获取
+**鼠标控制：**
+- **左键双击**：选择/跟踪物体
+- **右键拖动**：平移视角
+- **Ctrl + 右键拖动**：旋转视角
+- **滚轮**：缩放
 
-8. **Depth Image形状**: 注意depth_image的输入形状，根据agent.yaml应该是(87, 58)，即(height, width)
+**键盘快捷键：**
+- **Tab**：打开/关闭GUI面板
+  - 在GUI中可以查看渲染选项
+  - 检查 `Geoms -> Group 1/2` 确保射线可见
 
-## 与s2s_trot_joystick.py的区别
+---
 
-1. **两个ONNX模型**: Student策略需要两个模型（policy和depth_encoder），而teacher只需要一个
-2. **Observation结构**: Student策略的observation是753维（不含depth image），depth image通过单独的encoder处理
-3. **Depth Latent**: depth_encoder将depth image编码为32维的latent，替换observation中的scan部分
-4. **Yaw预测**: depth_encoder还预测yaw，用于更新observation中的delta_yaw部分
-5. **更新频率**: depth_encoder每5步更新一次
+## 🎯 Raycaster可视化效果
 
-## 依赖
+**红色射线：** 从相机发出的深度扫描射线  
+**红色/绿色球体：** 射线击中地形的位置（命中点）
 
-- mujoco
-- mujoco-viewer
-- onnxruntime
-- numpy
-- scipy
-- opencv-python
-- joystick_interface (来自s2s目录)
+**配置调整（在XML中）：**
+```xml
+<!-- 射线可视化 -->
+<config key="draw_deep_ray" value="1 5 1 1 0.2 0.5 1" />
+<!-- 参数: 启用 间隔 组ID R G B 透明度 -->
+
+<!-- 命中点可视化 -->
+<config key="draw_hip_point" value="1 0.01" />
+<!-- 参数: 启用 半径 -->
+```
+
+**间隔说明：**
+- `1`：显示全部射线
+- `2`：每隔2条显示一条
+- `5`：每隔5条显示一条（性能优化）
+
+---
+
+## 📊 实时信息显示
+
+运行时会在终端显示：
+
+```
+[策略] 指令: x=+1.50 y=-0.30 yaw=+0.50 | 速度: x=+1.23 y=-0.25 z=+0.02
+```
+
+- **模式**: `[策略]` 或 `[PD]`
+- **指令**: 手柄输入的目标速度
+- **速度**: 机器人实际速度（本体坐标系）
+
+---
+
+## ⚙️ 依赖安装
+
+### 必需依赖
+```bash
+pip install mujoco
+pip install mujoco-python-viewer
+pip install numpy
+pip install scipy
+```
+
+### 可选依赖（用于策略推理）
+```bash
+pip install onnxruntime
+```
+
+---
+
+## 🔧 常见问题
+
+### Q1: 看不到红色射线？
+**解决方案：**
+1. 按 `Tab` 打开GUI
+2. 检查 `Geoms -> Group 1` 和 `Group 2` 是否启用
+3. 调整相机视角到机器人前方
+4. 等待几秒让仿真初始化
+
+### Q2: 手柄不响应？
+**检查：**
+```bash
+ls /dev/input/js*
+# 应该看到 /dev/input/js0
+
+# 测试手柄
+jstest /dev/input/js0
+```
+
+### Q3: Raycaster插件加载失败？
+**确认：**
+- 在raycaster conda环境中运行
+- 插件路径正确：`/home/ares/mujoco_ray_caster/lib/libsensor_ray.so`
+
+### Q4: ONNX模型加载失败？
+**检查：**
+- 模型文件路径正确
+- onnxruntime已安装
+- 模型输入维度匹配（450维 = 45 × 10帧）
+
+---
+
+## 📝 参数说明
+
+### PolicyConfig 主要配置
+
+```python
+class PolicyConfig:
+    class sim_config:
+        dt = 0.005           # 仿真时间步 (200Hz)
+        decimation = 4       # 策略频率 (50Hz = 200Hz / 4)
+    
+    class robot_config:
+        kps = 25.0           # PD控制比例增益
+        kds = 0.5            # PD控制微分增益
+        tau_limit = [17,17,25]*4  # 扭矩限制
+    
+    class control:
+        action_scale = 0.25  # 动作缩放系数
+```
+
+---
+
+## 🚀 快速开始示例
+
+### 示例1: 测试raycaster
+```bash
+# 1. 激活环境
+conda activate raycaster
+
+# 2. 运行可视化
+python s2s/scripts/visualize_raycaster.py
+
+# 3. 观察红色射线扫描地形
+```
+
+### 示例2: 手柄控制（无策略）
+```bash
+# 1. 激活环境
+conda activate raycaster
+
+# 2. 连接手柄并运行
+python s2s/scripts/parkour_with_policy.py
+
+# 3. 使用左摇杆控制移动
+```
+
+### 示例3: 策略控制
+```bash
+# 1. 激活环境
+conda activate raycaster
+
+# 2. 运行策略
+python s2s/scripts/parkour_with_policy.py \
+    --load_model /path/to/your/student_policy.onnx
+
+# 3. 用手柄控制策略网络
+```
+
+---
+
+## 📄 文件清单
+
+```
+s2s/scripts/
+├── README.md                    # 本文件
+├── visualize_raycaster.py       # 基础可视化脚本
+└── parkour_with_policy.py       # 完整控制脚本
+
+s2s/
+├── robot_parkour_with_raycaster.xml  # 机器人模型（含raycaster）
+└── reference/                        # 参考代码
+    ├── joystick_interface.py
+    ├── s2s_trot_joystick.py
+    └── sensor_data_viewer.py
+```
+
+---
+
+## 📞 技术支持
+
+如有问题，请检查：
+1. 终端输出的错误信息
+2. raycaster插件是否正常加载
+3. 手柄设备是否连接
+4. ONNX模型是否匹配
+
+---
+
+**祝你使用愉快！** 🎉

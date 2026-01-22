@@ -1,0 +1,330 @@
+<?xml version='1.0' encoding='utf-8'?>
+<mujoco model="Legged_Robot_Parkour_with_Raycaster">
+  <compiler angle="radian" autolimits="true" eulerseq="zyx"/>
+  <option gravity='0 0 -9.81'>  
+    <flag frictionloss="enable"/>
+  </option>
+  <size njmax="500" nconmax="100" />
+
+  <!-- Ray Caster插件扩展 -->
+  <extension>
+    <plugin plugin="mujoco.sensor.ray_caster_camera" />
+  </extension>
+
+  <statistic center="0 0 0.1" extent="8" />
+
+  <visual>
+    <headlight diffuse="0.6 0.6 0.6" ambient="0.3 0.3 0.3" specular="0 0 0" />
+    <rgba haze="0.15 0.25 0.35 1" />
+    <global azimuth="-130" elevation="-20" />
+    <map znear="0.01" />
+  </visual>
+
+  <default>
+    <joint limited='true'/>
+    <motor ctrllimited='true'/>
+    <geom condim='1' contype="1" conaffinity="0" friction='0.6 0.2 0.2'/>
+    <default class='leg_joint_param'>
+      <joint damping="0.5" frictionloss="0.01" armature="0.01"/>
+    </default>
+    <default class="foot_collision">
+      <geom type="sphere" size="0.02" condim="6" friction="10.0 0.05 0.01"/> 
+    </default>
+  </default>
+
+  <asset>
+    <!-- 场景资源 -->
+    <texture type="skybox" builtin="gradient" rgb1="0.3 0.5 0.7" rgb2="0 0 0" width="512" height="3072" />
+    <texture type="2d" name="groundplane" builtin="checker" mark="edge" rgb1="0.2 0.3 0.4" rgb2="0.1 0.2 0.3" markrgb="0.8 0.8 0.8" width="300" height="300" />
+    <material name="groundplane" texture="groundplane" texuniform="true" texrepeat="5 5" reflectance="0.2" />
+    
+    <!-- 机器人mesh资源 -->
+    <mesh name="base_link" file="/home/ares/Desktop/DOGV2.2.4.SLDASM/DOGV2.2.4.SLDASM/meshes/base_link.STL"/>
+    <mesh name="LF_HipA_link" file="/home/ares/Desktop/DOGV2.2.4.SLDASM/DOGV2.2.4.SLDASM/meshes/LF_HipA_link.STL"/>
+    <mesh name="LF_HipF_link" file="/home/ares/Desktop/DOGV2.2.4.SLDASM/DOGV2.2.4.SLDASM/meshes/LF_HipF_link.STL"/>
+    <mesh name="LF_Knee_link" file="/home/ares/Desktop/DOGV2.2.4.SLDASM/DOGV2.2.4.SLDASM/meshes/LF_Knee_link.STL"/>
+    <mesh name="LF_Foot_link" file="/home/ares/Desktop/DOGV2.2.4.SLDASM/DOGV2.2.4.SLDASM/meshes/LF_Foot_link.STL"/>
+    <mesh name="LR_HipA_link" file="/home/ares/Desktop/DOGV2.2.4.SLDASM/DOGV2.2.4.SLDASM/meshes/LR_HipA_link.STL"/>
+    <mesh name="LR_HipF_link" file="/home/ares/Desktop/DOGV2.2.4.SLDASM/DOGV2.2.4.SLDASM/meshes/LR_HipF_link.STL"/>
+    <mesh name="LR_Knee_link" file="/home/ares/Desktop/DOGV2.2.4.SLDASM/DOGV2.2.4.SLDASM/meshes/LR_Knee_link.STL"/>
+    <mesh name="LR_Foot_link" file="/home/ares/Desktop/DOGV2.2.4.SLDASM/DOGV2.2.4.SLDASM/meshes/LR_Foot_link.STL"/>
+    <mesh name="RF_HipA_link" file="/home/ares/Desktop/DOGV2.2.4.SLDASM/DOGV2.2.4.SLDASM/meshes/RF_HipA_link.STL"/>
+    <mesh name="RF_HipF_link" file="/home/ares/Desktop/DOGV2.2.4.SLDASM/DOGV2.2.4.SLDASM/meshes/RF_HipF_link.STL"/>
+    <mesh name="RF_Knee_link" file="/home/ares/Desktop/DOGV2.2.4.SLDASM/DOGV2.2.4.SLDASM/meshes/RF_Knee_link.STL"/>
+    <mesh name="RF_Foot_link" file="/home/ares/Desktop/DOGV2.2.4.SLDASM/DOGV2.2.4.SLDASM/meshes/RF_Foot_link.STL"/>
+    <mesh name="RR_HipA_link" file="/home/ares/Desktop/DOGV2.2.4.SLDASM/DOGV2.2.4.SLDASM/meshes/RR_HipA_link.STL"/>
+    <mesh name="RR_HipF_link" file="/home/ares/Desktop/DOGV2.2.4.SLDASM/DOGV2.2.4.SLDASM/meshes/RR_HipF_link.STL"/>
+    <mesh name="RR_Knee_link" file="/home/ares/Desktop/DOGV2.2.4.SLDASM/DOGV2.2.4.SLDASM/meshes/RR_Knee_link.STL"/>
+    <mesh name="RR_Foot_link" file="/home/ares/Desktop/DOGV2.2.4.SLDASM/DOGV2.2.4.SLDASM/meshes/RR_Foot_link.STL"/>
+
+    <material name="matplane" reflectance="0.3" texture="texplane" texrepeat="1 1" texuniform="true"/>
+    <texture name="texplane" type="2d" builtin="checker" rgb1=".2 .3 .4" rgb2=".1 0.15 0.2" width="512" height="512"/>
+  </asset>
+
+  <worldbody>
+    <!-- 场景光照 -->
+    <light pos="0 0 1.5" dir="0 0 -1" directional="true" />
+    
+    <!-- ========== 场景地形：从 auto_scene_terrain.xml 加载 ========== -->
+    <!-- 地面：确保在geomgroup 0中，以便ray caster可以检测到 -->
+    <geom name="floor" size="0 0 0.05" type="plane" material="groundplane" group="0" conaffinity="1" condim="3" friction="1.0 0.2 0.2" />
+    
+    <!-- 第一组障碍：垂直排列的台阶 -->
+    <geom pos="0.0 -0.34999999999999964 0.25" type="box" size="0.8 0.05 0.2" quat="1.0 0.0 0.0 0.0" condim="3" friction="1.0 0.2 0.2" conaffinity="1"/>
+    <geom pos="0.0 0.8500000000000003 0.25" type="box" size="0.8 0.05 0.2" quat="1.0 0.0 0.0 0.0" condim="3" friction="1.0 0.2 0.2" conaffinity="1"/>
+    <geom pos="0.0 2.0500000000000003 0.25" type="box" size="0.8 0.05 0.2" quat="1.0 0.0 0.0 0.0" condim="3" friction="1.0 0.2 0.2" conaffinity="1"/>
+    <geom pos="0.0 3.25 0.25" type="box" size="0.8 0.05 0.2" quat="1.0 0.0 0.0 0.0" condim="3" friction="1.0 0.2 0.2" conaffinity="1"/>
+    <geom pos="0.0 4.45 0.25" type="box" size="0.8 0.05 0.2" quat="1.0 0.0 0.0 0.0" condim="3" friction="1.0 0.2 0.2" conaffinity="1"/>
+    <geom pos="0.0 5.65 0.25" type="box" size="0.8 0.05 0.2" quat="1.0 0.0 0.0 0.0" condim="3" friction="1.0 0.2 0.2" conaffinity="1"/>
+    
+    <!-- 第二组障碍：斜坡 -->
+    <geom pos="2.0 0.3 0.05" type="box" size="0.75 0.3 0.02" quat="1.0 0.0 0.0 0.0" condim="3" friction="1.0 0.2 0.2" conaffinity="1"/>
+    <geom pos="2.0 1.6 0.3" type="box" size="0.75 1.0307764064044151 0.02" quat="0.992507556682903 0.12218326369570447 0.0 0.0" condim="3" friction="1.0 0.2 0.2" conaffinity="1"/>
+    <geom pos="2.0 2.9 0.55" type="box" size="0.75 0.3 0.02" quat="1.0 0.0 0.0 0.0" condim="3" friction="1.0 0.2 0.2" conaffinity="1"/>
+    <geom pos="2.0 4.2 0.3" type="box" size="0.75 1.0307764064044151 0.02" quat="0.992507556682903 -0.12218326369570447 0.0 0.0" condim="3" friction="1.0 0.2 0.2" conaffinity="1"/>
+    <geom pos="2.0 5.5 0.05" type="box" size="0.75 0.3 0.02" quat="1.0 0.0 0.0 0.0" condim="3" friction="1.0 0.2 0.2" conaffinity="1"/>
+    
+    <!-- 第三组障碍：阶梯 -->
+    <geom pos="4.5 0.3 0.05" type="box" size="0.75 0.3 0.04" quat="1.0 0.0 0.0 0.0" condim="3" friction="1.0 0.2 0.2" conaffinity="1"/>
+    <geom pos="4.5 0.725 0.09" type="box" size="0.75 0.125 0.04" quat="1.0 0.0 0.0 0.0" condim="3" friction="1.0 0.2 0.2" conaffinity="1"/>
+    <geom pos="4.5 0.975 0.16999999999999998" type="box" size="0.75 0.125 0.04" quat="1.0 0.0 0.0 0.0" condim="3" friction="1.0 0.2 0.2" conaffinity="1"/>
+    <geom pos="4.5 1.225 0.25" type="box" size="0.75 0.125 0.04" quat="1.0 0.0 0.0 0.0" condim="3" friction="1.0 0.2 0.2" conaffinity="1"/>
+    <geom pos="4.5 1.475 0.33" type="box" size="0.75 0.125 0.04" quat="1.0 0.0 0.0 0.0" condim="3" friction="1.0 0.2 0.2" conaffinity="1"/>
+    <geom pos="4.5 1.725 0.41" type="box" size="0.75 0.125 0.04" quat="1.0 0.0 0.0 0.0" condim="3" friction="1.0 0.2 0.2" conaffinity="1"/>
+    <geom pos="4.5 1.975 0.49" type="box" size="0.75 0.125 0.04" quat="1.0 0.0 0.0 0.0" condim="3" friction="1.0 0.2 0.2" conaffinity="1"/>
+    <geom pos="4.5 2.225 0.5700000000000001" type="box" size="0.75 0.125 0.04" quat="1.0 0.0 0.0 0.0" condim="3" friction="1.0 0.2 0.2" conaffinity="1"/>
+    <geom pos="4.5 2.475 0.65" type="box" size="0.75 0.125 0.04" quat="1.0 0.0 0.0 0.0" condim="3" friction="1.0 0.2 0.2" conaffinity="1"/>
+    <geom pos="4.5 2.9 0.65" type="box" size="0.75 0.3 0.04" quat="1.0 0.0 0.0 0.0" condim="3" friction="1.0 0.2 0.2" conaffinity="1"/>
+    <geom pos="4.5 3.325 0.5700000000000001" type="box" size="0.75 0.125 0.04" quat="1.0 0.0 0.0 0.0" condim="3" friction="1.0 0.2 0.2" conaffinity="1"/>
+    <geom pos="4.5 3.575 0.49000000000000005" type="box" size="0.75 0.125 0.04" quat="1.0 0.0 0.0 0.0" condim="3" friction="1.0 0.2 0.2" conaffinity="1"/>
+    <geom pos="4.5 3.825 0.41000000000000003" type="box" size="0.75 0.125 0.04" quat="1.0 0.0 0.0 0.0" condim="3" friction="1.0 0.2 0.2" conaffinity="1"/>
+    <geom pos="4.5 4.075 0.33000000000000007" type="box" size="0.75 0.125 0.04" quat="1.0 0.0 0.0 0.0" condim="3" friction="1.0 0.2 0.2" conaffinity="1"/>
+    <geom pos="4.5 4.325 0.25000000000000006" type="box" size="0.75 0.125 0.04" quat="1.0 0.0 0.0 0.0" condim="3" friction="1.0 0.2 0.2" conaffinity="1"/>
+    <geom pos="4.5 4.575 0.17000000000000004" type="box" size="0.75 0.125 0.04" quat="1.0 0.0 0.0 0.0" condim="3" friction="1.0 0.2 0.2" conaffinity="1"/>
+    <geom pos="4.5 4.825 0.09000000000000008" type="box" size="0.75 0.125 0.04" quat="1.0 0.0 0.0 0.0" condim="3" friction="1.0 0.2 0.2" conaffinity="1"/>
+    <geom pos="4.5 5.075 0.010000000000000009" type="box" size="0.75 0.125 0.04" quat="1.0 0.0 0.0 0.0" condim="3" friction="1.0 0.2 0.2" conaffinity="1"/>
+    <geom pos="4.5 5.5 0.05" type="box" size="0.75 0.3 0.04" quat="1.0 0.0 0.0 0.0" condim="3" friction="1.0 0.2 0.2" conaffinity="1"/>
+    
+    <!-- 第四组障碍：跳跃台 -->
+    <geom pos="7.0 -0.25 0.175" type="box" size="0.75 0.7603453162872774 0.02" quat="0.9965926760297167 0.08248053154489327 0.0 0.0" condim="3" friction="1.0 0.2 0.2" conaffinity="1"/>
+    <geom pos="7.0 0.9 0.175" type="box" size="0.75 0.4 0.125" quat="1.0 0.0 0.0 0.0" condim="3" friction="1.0 0.2 0.2" conaffinity="1"/>
+    <geom pos="7.0 2.1 0.175" type="box" size="0.75 0.4 0.125" quat="1.0 0.0 0.0 0.0" condim="3" friction="1.0 0.2 0.2" conaffinity="1"/>
+    <geom pos="7.0 3.3000000000000003 0.175" type="box" size="0.75 0.4 0.125" quat="1.0 0.0 0.0 0.0" condim="3" friction="1.0 0.2 0.2" conaffinity="1"/>
+    <geom pos="7.0 4.500000000000001 0.175" type="box" size="0.75 0.4 0.125" quat="1.0 0.0 0.0 0.0" condim="3" friction="1.0 0.2 0.2" conaffinity="1"/>
+    <geom pos="7.0 5.700000000000001 0.175" type="box" size="0.75 0.4 0.125" quat="1.0 0.0 0.0 0.0" condim="3" friction="1.0 0.2 0.2" conaffinity="1"/>
+    <geom pos="7.0 6.8500000000000005 0.175" type="box" size="0.75 0.7603453162872774 0.02" quat="0.9965926760297167 -0.08248053154489327 0.0 0.0" condim="3" friction="1.0 0.2 0.2" conaffinity="1"/>
+    
+    <!-- ========== 机器人：初始位置在场景起点 ========== -->
+    <body name="base_link" pos="0 0 0.5">
+      <freejoint name="floating_base"/>
+      <inertial pos="0.003073 -0.000011 0.058211" mass="5.2764368" fullinertia="0.0328421 0.1037622 0.1165384 0.0000334 -0.0072546 0.0000334"/>
+      
+      <!-- IMU传感器站点 -->
+      <site name='imu' size='0.01' pos='0 0 0'/>
+      
+      <!-- 机器人视觉几何体 -->
+      <geom type="mesh" mesh="base_link" rgba="0.75 0.75 0.75 1" contype="0" conaffinity="0" group="1"/>
+      <!-- <geom type="box" size="0.3 0.1 0.1" pos="0 0 0" rgba="0.75 0.75 0.75 1" contype="1" conaffinity="0" group="3"/> -->
+
+      <!-- ========== Ray Caster Camera: 参考leggedrobot_with_terrain.xml的位置 ========== -->
+      <!-- 位置: base_link前方约0.315米，高度约0.023米 -->
+      <!-- 旋转: 相机朝向前方，与机器人前进方向一致 -->
+      <camera name="ray_caster_camera" pos="0.31505 0.00 0.023" 
+              quat="0.0006 0.5736 0.0004 -0.8192"/>
+
+      <!-- 左前腿 -->
+      <body name="LF_HipA_link" pos="0.16 0.0675 0.063" quat="0.5 0.5 0.5 0.5">
+        <inertial pos="0.002621 0.000052 0.046852" mass="0.452382" fullinertia="0.0005587 0.000347 0.000309 0.0000003 -0.0000007 -0.0000001"/>
+        <joint name="LF_HipA_joint" axis="0 0 1" range="-0.7853982 0.7853982" class="leg_joint_param"/>
+        <geom type="mesh" mesh="LF_HipA_link"/>
+        
+        <body name="LF_HipF_link" pos="0.018 0 0.048" quat="0.707 0 0.707 0">
+          <inertial pos="0.033261 -0.016881 0.050217" mass="0.779164" fullinertia="0.0015974 0.0032684 0.0043304 0.0015051 -0.0004429 0.0002247"/>
+          <joint name="LF_HipF_joint" axis="0 0 1" range="-1.2217658 0.8726683" class="leg_joint_param"/>
+          <geom type="mesh" mesh="LF_HipF_link"/>
+          
+          <body name="LF_Knee_link" pos="0.1707 -0.1222 0.05">
+            <inertial pos="-0.055107 -0.080197 0.016515" mass="0.121558" fullinertia="0.0005493 0.0002237 0.0007696 -0.0003334 -0.0000001 -0.0000002"/>
+            <joint name="LF_Knee_joint" axis="0 0 1" range="-1.2217299 0.69813" class="leg_joint_param"/>
+            <geom type="mesh" mesh="LF_Knee_link"/>
+            <site name="LF_foot_site" pos="-0.11 -0.19 0.016" size="0.01"/>
+            
+            <geom name="LF_foot_visual" type="mesh" mesh="LF_Foot_link" pos="-0.11 -0.19 0.016" quat="0 0 0.707 0.707" 
+                  contype="0" conaffinity="0" group="1" material="matplane"/> 
+            <geom name="LF_foot_collision" class="foot_collision" pos="-0.11 -0.19 0.016" rgba="0 0 0 0"/>
+          </body>
+        </body>
+      </body>
+
+      <!-- 左后腿 -->
+      <body name="LR_HipA_link" pos="-0.16 0.0675 0.063" quat="0.5 0.5 -0.5 -0.5">
+        <inertial pos="-0.002621 -0.000052 0.046852" mass="0.452382" fullinertia="0.0005587 0.000347 0.000309 0.0000003 0.0000007 0.0000001"/>
+        <joint name="LR_HipA_joint" axis="0 0 1" range="-0.7853982 0.7853982" class="leg_joint_param"/>
+        <geom type="mesh" mesh="LR_HipA_link"/>
+        
+        <body name="LR_HipF_link" pos="-0.018 0 0.048" quat="0.707 0 -0.707 0">
+          <inertial pos="0.03326 -0.016881 0.050217" mass="0.779164" fullinertia="0.0015974 0.0032684 0.0043304 0.0015051 -0.0004429 0.0002247"/>
+          <joint name="LR_HipF_joint" axis="0 0 1" range="-1.2217305 0.8726683" class="leg_joint_param"/>
+          <geom type="mesh" mesh="LR_HipF_link"/>
+          
+          <body name="LR_Knee_link" pos="0.1707 -0.1222 0.05">
+            <inertial pos="-0.055107 -0.080197 0.016515" mass="0.121558" fullinertia="0.0005493 0.0002237 0.0007696 -0.0003334 -0.0000001 -0.0000002"/>
+            <joint name="LR_Knee_joint" axis="0 0 1" range="-1.2217299 0.69813" class="leg_joint_param"/>
+            <geom type="mesh" mesh="LR_Knee_link"/>
+            <site name="LR_foot_site" pos="-0.11 -0.19 0.016" size="0.01"/>
+
+            <geom name="LR_foot_visual" type="mesh" mesh="LR_Foot_link" pos="-0.11 -0.19 0.016" quat="0 0 -0.707 -0.707" 
+                  contype="0" conaffinity="0" group="1" material="matplane"/>
+            <geom name="LR_foot_collision" class="foot_collision" pos="-0.11 -0.19 0.016" rgba="0 0 0 0"/>
+          </body>
+        </body>
+      </body>
+
+      <!-- 右前腿 -->
+      <body name="RF_HipA_link" pos="0.16 -0.0675 0.063" quat="0.5 0.5 0.5 0.5">
+        <inertial pos="-0.002621 -0.000052 0.046852" mass="0.452382" fullinertia="0.0005587 0.000347 0.000309 0.0000003 0.0000007 0.0000001"/>
+        <joint name="RF_HipA_joint" axis="0 0 1" range="-0.7853982 0.7853982" class="leg_joint_param"/>
+        <geom type="mesh" mesh="RF_HipA_link"/>
+        
+        <body name="RF_HipF_link" pos="-0.018 0 0.048" quat="0.707 0 -0.707 0">
+          <inertial pos="-0.033247 -0.016939 0.050217" mass="0.779164" fullinertia="0.0015958 0.0032692 0.0043296 -0.0015036 0.0004432 0.0002236"/>
+          <joint name="RF_HipF_joint" axis="0 0 1" range="-0.8726999 1.2217342" class="leg_joint_param"/>
+          <geom type="mesh" mesh="RF_HipF_link"/>
+          
+          <body name="RF_Knee_link" pos="-0.1707 -0.1222 0.05">
+            <inertial pos="0.055107 -0.080197 0.016485" mass="0.121558" fullinertia="0.0005493 0.0002237 0.0007696 0.0003334 -0.0000001 0.0000002"/>
+            <joint name="RF_Knee_joint" axis="0 0 1" range="-0.6981312 1.2217287" class="leg_joint_param"/>
+            <geom type="mesh" mesh="RF_Knee_link"/>
+            <site name="RF_foot_site" pos="0.11 -0.19 0.016" size="0.01"/>
+
+            <geom name="RF_foot_visual" type="mesh" mesh="RF_Foot_link" pos="0.11 -0.19 0.016" quat="0.707 -0.707 0 0" 
+                  contype="0" conaffinity="0" group="1" material="matplane"/>
+            <geom name="RF_foot_collision" class="foot_collision" pos="0.11 -0.19 0.016" rgba="0 0 0 0"/>
+          </body>
+        </body>
+      </body>
+
+      <!-- 右后腿 -->
+      <body name="RR_HipA_link" pos="-0.16 -0.0675 0.063" quat="0.5 0.5 -0.5 -0.5">
+        <inertial pos="0.002621 0.000052 0.046852" mass="0.452382" fullinertia="0.0005587 0.000347 0.000309 0.0000003 -0.0000007 -0.0000001"/>
+        <joint name="RR_HipA_joint" axis="0 0 1" range="-0.7853982 0.7853982" class="leg_joint_param"/>
+        <geom type="mesh" mesh="RR_HipA_link"/>
+        
+        <body name="RR_HipF_link" pos="0.018 0 0.048" quat="0.707 0 0.707 0">
+          <inertial pos="-0.033246 -0.01694 0.050217" mass="0.779164" fullinertia="0.0015958 0.0032692 0.0043296 -0.0015036 0.0004432 0.0002236"/>
+          <joint name="RR_HipF_joint" axis="0 0 1" range="-0.8726999 1.2217305" class="leg_joint_param"/>
+          <geom type="mesh" mesh="RR_HipF_link"/>
+          
+          <body name="RR_Knee_link" pos="-0.1707 -0.1222 0.05">
+            <inertial pos="0.055107 -0.080197 0.016485" mass="0.121558" fullinertia="0.0005493 0.0002237 0.0007696 0.0003334 -0.0000001 0.0000002"/>
+            <joint name="RR_Knee_joint" axis="0 0 1" range="-0.6981312 1.2217287" class="leg_joint_param"/>
+            <geom type="mesh" mesh="RR_Knee_link"/>
+            <site name="RR_foot_site" pos="0.11 -0.19 0.016" size="0.01"/>
+
+            <geom name="RR_foot_visual" type="mesh" mesh="RR_Foot_link" pos="0.11 -0.19 0.016" quat="0.707 -0.707 0 0" 
+                  contype="0" conaffinity="0" group="1" material="matplane"/>
+            <geom name="RR_foot_collision" class="foot_collision" pos="0.11 -0.19 0.016" rgba="0 0 0 0"/>
+          </body>
+        </body>
+      </body>
+    </body>
+  </worldbody>
+
+  <actuator>
+    <motor name="LF_HipA" joint="LF_HipA_joint" gear="1" ctrllimited="true" ctrlrange="-17 17"/>
+    <motor name="LF_HipF" joint="LF_HipF_joint" gear="1" ctrllimited="true" ctrlrange="-17 17"/>
+    <motor name="LF_Knee" joint="LF_Knee_joint" gear="1" ctrllimited="true" ctrlrange="-25 25"/>
+
+    <motor name="LR_HipA" joint="LR_HipA_joint" gear="1" ctrllimited="true" ctrlrange="-17 17"/>
+    <motor name="LR_HipF" joint="LR_HipF_joint" gear="1" ctrllimited="true" ctrlrange="-17 17"/>
+    <motor name="LR_Knee" joint="LR_Knee_joint" gear="1" ctrllimited="true" ctrlrange="-25 25"/>
+
+    <motor name="RF_HipA" joint="RF_HipA_joint" gear="1" ctrllimited="true" ctrlrange="-17 17"/>
+    <motor name="RF_HipF" joint="RF_HipF_joint" gear="1" ctrllimited="true" ctrlrange="-17 17"/>
+    <motor name="RF_Knee" joint="RF_Knee_joint" gear="1" ctrllimited="true" ctrlrange="-25 25"/>
+
+    <motor name="RR_HipA" joint="RR_HipA_joint" gear="1" ctrllimited="true" ctrlrange="-17 17"/>
+    <motor name="RR_HipF" joint="RR_HipF_joint" gear="1" ctrllimited="true" ctrlrange="-17 17"/>
+    <motor name="RR_Knee" joint="RR_Knee_joint" gear="1" ctrllimited="true" ctrlrange="-25 25"/>
+  </actuator>
+
+  <sensor>
+    <!-- IMU传感器 -->
+    <framequat name="orientation" objtype="site" objname="imu" noise="0.001"/>
+    <framepos name="position" objtype="site" objname="imu" noise="0.001"/>
+    <gyro name="angular-velocity" site="imu" noise="0.005"/>
+    <velocimeter name="linear-velocity" site="imu" noise="0.001"/>
+    <accelerometer name="linear-acceleration" site="imu" noise="0.005"/>
+    
+    <!-- 脚部触觉传感器 -->
+    <touch name="LF_touch" site="LF_foot_site"/>
+    <touch name="LR_touch" site="LR_foot_site"/>
+    <touch name="RF_touch" site="RF_foot_site"/>
+    <touch name="RR_touch" site="RR_foot_site"/>
+    
+    <!-- ========== Ray Caster Camera Sensor ========== -->
+    <plugin name="ray_caster_camera" plugin="mujoco.sensor.ray_caster_camera" 
+            objtype="camera" objname="ray_caster_camera">
+      <!-- 相机参数：对应Isaac Lab的PinholeCameraPatternCfg -->
+      <config key="focal_length" value="11.041" />
+      <config key="horizontal_aperture" value="20.955" />
+      <config key="vertical_aperture" value="12.240" />
+      <config key="size" value="106 60" />
+      
+      <!-- 测距范围：对应Isaac Lab的max_distance=2.0 -->
+      <config key="dis_range" value="0.01 2.0" />
+      
+      <!-- 数据类型：深度数据（距离相机的距离） -->
+      <config key="sensor_data_types" value="data_inf_zero" />
+      
+      <!-- ========== 噪声配置（可选） ========== -->
+      <!-- 如需添加噪声，取消注释以下任一选项 -->
+      
+      <!-- 选项1: 均匀噪声 -->
+      <!-- <config key="noise_type" value="uniform" /> -->
+      <!-- <config key="noise_cfg" value="-0.05 0.05 42" /> -->
+      
+      <!-- 选项2: 高斯噪声 -->
+      <!-- <config key="noise_type" value="gaussian" /> -->
+      <!-- <config key="noise_cfg" value="0.0 0.02 123" /> -->
+      
+      <!-- 选项3: 噪声+随机置零 -->
+      <!-- <config key="noise_type" value="noise1" /> -->
+      <!-- <config key="noise_cfg" value="-0.1 0.1 0.05 999" /> -->
+      
+      <!-- 选项4: 角度相关噪声 -->
+      <!-- <config key="noise_type" value="noise2" /> -->
+      <!-- <config key="noise_cfg" value="-0.1 0.1 0.05 90 180 0.0 0.3 2024" /> -->
+      
+      <!-- 检测设置：检测所有几何体组 -->
+      <!-- geomgroup格式：6个值对应geomgroup 0-5，1=检测，0=不检测 -->
+      <!-- 地面在geomgroup 0，所以第一个值必须为1 -->
+      <config key="geomgroup" value="1 1 1 1 1 1" />
+      
+      <!-- 不检测传感器父body（避免检测到机器人自身） -->
+      <config key="detect_parentbody" value="0" />
+      
+      <!-- ========== 可视化选项：在MuJoCo viewer中显示射线和命中点 ========== -->
+      <!-- draw_deep_ray格式: 启用 间隔 组ID R G B 透明度 -->
+      <!-- 参数说明: 
+           - 启用: 1=开启可视化, 0=关闭
+           - 间隔: 每隔N条射线绘制一次（2=每隔2条绘制，1=全部绘制）
+           - 组ID: MuJoCo渲染组（0-5）
+           - R G B: 颜色值（0-1范围）
+           - 透明度: 0=完全透明, 1=完全不透明
+      -->
+      <config key="draw_deep_ray" value="1 5 1 1 0.2 0.5 1" />  
+      
+      <!-- draw_hip_point格式: 启用 半径 -->
+      <!-- 参数说明:
+           - 启用: 1=显示命中点, 0=不显示
+           - 半径: 命中点球体的半径（米）
+      -->
+      <config key="draw_hip_point" value="1 0.01" />
+      
+      <!-- 性能选项（可选） -->
+      <!-- <config key="num_thread" value="4" /> -->
+      <!-- <config key="compute_time_log" value="1" /> -->
+    </plugin>
+  </sensor>
+</mujoco>

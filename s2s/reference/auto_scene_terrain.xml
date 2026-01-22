@@ -1,0 +1,55 @@
+<?xml version='1.0' encoding='utf-8'?>
+<mujoco model="ares scene">
+  <statistic center="0 0 0.1" extent="0.8" />
+  <visual>
+    <headlight diffuse="0.6 0.6 0.6" ambient="0.3 0.3 0.3" specular="0 0 0" />
+    <rgba haze="0.15 0.25 0.35 1" />
+    <global azimuth="-130" elevation="-20" />
+  </visual>
+  <asset>
+    <texture type="skybox" builtin="gradient" rgb1="0.3 0.5 0.7" rgb2="0 0 0" width="512" height="3072" />
+    <texture type="2d" name="groundplane" builtin="checker" mark="edge" rgb1="0.2 0.3 0.4" rgb2="0.1 0.2 0.3" markrgb="0.8 0.8 0.8" width="300" height="300" />
+    <material name="groundplane" texture="groundplane" texuniform="true" texrepeat="5 5" reflectance="0.2" />
+  </asset>
+  <worldbody>
+    <light pos="0 0 1.5" dir="0 0 -1" directional="true" />
+    <geom name="floor" size="0 0 0.05" type="plane" material="groundplane" />
+    <geom pos="0.0 -0.34999999999999964 0.25" type="box" size="0.8 0.05 0.2" quat="1.0 0.0 0.0 0.0" />
+    <geom pos="0.0 0.8500000000000003 0.25" type="box" size="0.8 0.05 0.2" quat="1.0 0.0 0.0 0.0" />
+    <geom pos="0.0 2.0500000000000003 0.25" type="box" size="0.8 0.05 0.2" quat="1.0 0.0 0.0 0.0" />
+    <geom pos="0.0 3.25 0.25" type="box" size="0.8 0.05 0.2" quat="1.0 0.0 0.0 0.0" />
+    <geom pos="0.0 4.45 0.25" type="box" size="0.8 0.05 0.2" quat="1.0 0.0 0.0 0.0" />
+    <geom pos="0.0 5.65 0.25" type="box" size="0.8 0.05 0.2" quat="1.0 0.0 0.0 0.0" />
+    <geom pos="2.0 0.3 0.05" type="box" size="0.75 0.3 0.02" quat="1.0 0.0 0.0 0.0" />
+    <geom pos="2.0 1.6 0.3" type="box" size="0.75 1.0307764064044151 0.02" quat="0.992507556682903 0.12218326369570447 0.0 0.0" />
+    <geom pos="2.0 2.9 0.55" type="box" size="0.75 0.3 0.02" quat="1.0 0.0 0.0 0.0" />
+    <geom pos="2.0 4.2 0.3" type="box" size="0.75 1.0307764064044151 0.02" quat="0.992507556682903 -0.12218326369570447 0.0 0.0" />
+    <geom pos="2.0 5.5 0.05" type="box" size="0.75 0.3 0.02" quat="1.0 0.0 0.0 0.0" />
+    <geom pos="4.5 0.3 0.05" type="box" size="0.75 0.3 0.04" quat="1.0 0.0 0.0 0.0" />
+    <geom pos="4.5 0.725 0.09" type="box" size="0.75 0.125 0.04" quat="1.0 0.0 0.0 0.0" />
+    <geom pos="4.5 0.975 0.16999999999999998" type="box" size="0.75 0.125 0.04" quat="1.0 0.0 0.0 0.0" />
+    <geom pos="4.5 1.225 0.25" type="box" size="0.75 0.125 0.04" quat="1.0 0.0 0.0 0.0" />
+    <geom pos="4.5 1.475 0.33" type="box" size="0.75 0.125 0.04" quat="1.0 0.0 0.0 0.0" />
+    <geom pos="4.5 1.725 0.41" type="box" size="0.75 0.125 0.04" quat="1.0 0.0 0.0 0.0" />
+    <geom pos="4.5 1.975 0.49" type="box" size="0.75 0.125 0.04" quat="1.0 0.0 0.0 0.0" />
+    <geom pos="4.5 2.225 0.5700000000000001" type="box" size="0.75 0.125 0.04" quat="1.0 0.0 0.0 0.0" />
+    <geom pos="4.5 2.475 0.65" type="box" size="0.75 0.125 0.04" quat="1.0 0.0 0.0 0.0" />
+    <geom pos="4.5 2.9 0.65" type="box" size="0.75 0.3 0.04" quat="1.0 0.0 0.0 0.0" />
+    <geom pos="4.5 3.325 0.5700000000000001" type="box" size="0.75 0.125 0.04" quat="1.0 0.0 0.0 0.0" />
+    <geom pos="4.5 3.575 0.49000000000000005" type="box" size="0.75 0.125 0.04" quat="1.0 0.0 0.0 0.0" />
+    <geom pos="4.5 3.825 0.41000000000000003" type="box" size="0.75 0.125 0.04" quat="1.0 0.0 0.0 0.0" />
+    <geom pos="4.5 4.075 0.33000000000000007" type="box" size="0.75 0.125 0.04" quat="1.0 0.0 0.0 0.0" />
+    <geom pos="4.5 4.325 0.25000000000000006" type="box" size="0.75 0.125 0.04" quat="1.0 0.0 0.0 0.0" />
+    <geom pos="4.5 4.575 0.17000000000000004" type="box" size="0.75 0.125 0.04" quat="1.0 0.0 0.0 0.0" />
+    <geom pos="4.5 4.825 0.09000000000000008" type="box" size="0.75 0.125 0.04" quat="1.0 0.0 0.0 0.0" />
+    <geom pos="4.5 5.075 0.010000000000000009" type="box" size="0.75 0.125 0.04" quat="1.0 0.0 0.0 0.0" />
+    <geom pos="4.5 5.5 0.05" type="box" size="0.75 0.3 0.04" quat="1.0 0.0 0.0 0.0" />
+    <geom pos="7.0 -0.25 0.175" type="box" size="0.75 0.7603453162872774 0.02" quat="0.9965926760297167 0.08248053154489327 0.0 0.0" />
+    <geom pos="7.0 0.9 0.175" type="box" size="0.75 0.4 0.125" quat="1.0 0.0 0.0 0.0" />
+    <geom pos="7.0 2.1 0.175" type="box" size="0.75 0.4 0.125" quat="1.0 0.0 0.0 0.0" />
+    <geom pos="7.0 3.3000000000000003 0.175" type="box" size="0.75 0.4 0.125" quat="1.0 0.0 0.0 0.0" />
+    <geom pos="7.0 4.500000000000001 0.175" type="box" size="0.75 0.4 0.125" quat="1.0 0.0 0.0 0.0" />
+    <geom pos="7.0 5.700000000000001 0.175" type="box" size="0.75 0.4 0.125" quat="1.0 0.0 0.0 0.0" />
+    <geom pos="7.0 6.8500000000000005 0.175" type="box" size="0.75 0.7603453162872774 0.02" quat="0.9965926760297167 -0.08248053154489327 0.0 0.0" />
+  </worldbody>
+</mujoco>
