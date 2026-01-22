@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: BSD-3-Clause
 """
-Parkour机器人完整控制脚本
+Parkour机器人完整控制脚本 (已修复速度同步问题)
 整合功能:
 1. Raycaster深度相机可视化
 2. Joystick手柄控制
@@ -234,7 +234,7 @@ def main(args):
     # ----------------------------------------
 
     print("=" * 60)
-    print("Parkour机器人 - 策略控制 + Raycaster可视化")
+    print("Parkour机器人 - 策略控制 + Raycaster可视化 (实时同步版)")
     print("=" * 60)
 
     # 1. 加载raycaster插件
@@ -344,96 +344,113 @@ def main(args):
     count_lowlevel = 0
     scales = cfg.normalization.isaac_obs_scales
 
+    # ================= 速率控制参数 =================
+    # 物理步长 0.005s，目标渲染帧率约 33 FPS
+    # 这意味着每跑 6 步物理仿真，更新一次画面
+    render_decimation = 6
+    target_cycle_time = cfg.sim_config.dt * render_decimation
+    print(f"⏱️ 实时同步已启用: 目标每帧耗时 {target_cycle_time:.4f}s (约33FPS)")
     print("✓ Viewer已启动\n")
 
     # 9. 仿真循环
     try:
         while viewer.is_alive:
-            # 获取观测
-            q_policy, dq_policy, quat, omega = get_obs(data)
+            # 记录循环开始时间，用于帧率同步
+            cycle_start_time = time.time()
 
-            # 计算实际速度
-            vel_world = data.qvel[:3]
-            r_temp = R.from_quat(quat)
-            vel_body = r_temp.apply(vel_world, inverse=True)
+            # --- 内层循环：执行多次物理步 ---
+            for _ in range(render_decimation):
+                # 获取观测
+                q_policy, dq_policy, quat, omega = get_obs(data)
 
-            # 获取手柄指令
-            cmd_x, cmd_y, cmd_yaw = joy.get_command()
+                # 计算实际速度 (用于打印)
+                vel_world = data.qvel[:3]
+                r_temp = R.from_quat(quat)
+                vel_body = r_temp.apply(vel_world, inverse=True)
 
-            # 策略推理 (50Hz)
-            if ort_session and count_lowlevel % cfg.sim_config.decimation == 0:
-                obs_list = []
+                # 获取手柄指令
+                cmd_x, cmd_y, cmd_yaw = joy.get_command()
 
-                # 角速度
-                obs_list.append(omega * scales.ang_vel)
+                # 策略推理 (50Hz，即每4步物理推理一次)
+                if ort_session and count_lowlevel % cfg.sim_config.decimation == 0:
+                    obs_list = []
 
-                # 重力投影
-                obs_list.append(
-                    get_gravity_orientation(quat) * scales.projected_gravity
+                    # 角速度
+                    obs_list.append(omega * scales.ang_vel)
+
+                    # 重力投影
+                    obs_list.append(
+                        get_gravity_orientation(quat) * scales.projected_gravity
+                    )
+
+                    # 手柄指令
+                    current_cmd = np.array([cmd_x, cmd_y, cmd_yaw], dtype=np.double)
+                    obs_list.append(current_cmd * scales.commands)
+
+                    # 关节位置
+                    dof_pos_rel = q_policy - cfg.robot_config.default_dof_pos
+                    obs_list.append(dof_pos_rel * scales.joint_pos)
+
+                    # 关节速度
+                    obs_list.append(dq_policy * scales.joint_vel)
+
+                    # 上一帧动作
+                    obs_list.append(action_policy * scales.actions)
+
+                    # 构造观测
+                    current_obs = np.concatenate(obs_list).astype(np.float32)
+                    current_obs = np.clip(
+                        current_obs,
+                        -cfg.normalization.clip_observations,
+                        cfg.normalization.clip_observations,
+                    )
+                    hist_obs.append(current_obs)
+
+                    # ONNX推理
+                    policy_input = np.concatenate(hist_obs)[None, :]
+                    input_name = ort_session.get_inputs()[0].name
+                    raw_action = ort_session.run(None, {input_name: policy_input})[0][0]
+
+                    action_policy = np.clip(
+                        raw_action,
+                        -cfg.normalization.clip_actions,
+                        cfg.normalization.clip_actions,
+                    )
+
+                    # Policy -> Sim 顺序
+                    action_sim = action_policy[policy2sim_indices]
+                    target_q_sim = (
+                        action_sim * cfg.control.action_scale
+                        + cfg.robot_config.default_dof_pos
+                    )
+
+                # PD控制
+                q_sim_raw = data.qpos[7:]
+                dq_sim_raw = data.qvel[6:]
+
+                tau = pd_control(
+                    target_q_sim,
+                    q_sim_raw,
+                    cfg.robot_config.kps,
+                    np.zeros_like(dq_sim_raw),
+                    dq_sim_raw,
+                    cfg.robot_config.kds,
+                    0.0,
+                )
+                tau = np.clip(
+                    tau, -cfg.robot_config.tau_limit, cfg.robot_config.tau_limit
                 )
 
-                # 手柄指令
-                current_cmd = np.array([cmd_x, cmd_y, cmd_yaw], dtype=np.double)
-                obs_list.append(current_cmd * scales.commands)
+                data.ctrl[:] = tau
+                mujoco.mj_step(model, data)
 
-                # 关节位置
-                dof_pos_rel = q_policy - cfg.robot_config.default_dof_pos
-                obs_list.append(dof_pos_rel * scales.joint_pos)
+                count_lowlevel += 1
 
-                # 关节速度
-                obs_list.append(dq_policy * scales.joint_vel)
-
-                # 上一帧动作
-                obs_list.append(action_policy * scales.actions)
-
-                # 构造观测
-                current_obs = np.concatenate(obs_list).astype(np.float32)
-                current_obs = np.clip(
-                    current_obs,
-                    -cfg.normalization.clip_observations,
-                    cfg.normalization.clip_observations,
-                )
-                hist_obs.append(current_obs)
-
-                # ONNX推理
-                policy_input = np.concatenate(hist_obs)[None, :]
-                input_name = ort_session.get_inputs()[0].name
-                raw_action = ort_session.run(None, {input_name: policy_input})[0][0]
-
-                action_policy = np.clip(
-                    raw_action,
-                    -cfg.normalization.clip_actions,
-                    cfg.normalization.clip_actions,
-                )
-
-                # Policy -> Sim 顺序
-                action_sim = action_policy[policy2sim_indices]
-                target_q_sim = (
-                    action_sim * cfg.control.action_scale
-                    + cfg.robot_config.default_dof_pos
-                )
-
-            # PD控制
-            q_sim_raw = data.qpos[7:]
-            dq_sim_raw = data.qvel[6:]
-
-            tau = pd_control(
-                target_q_sim,
-                q_sim_raw,
-                cfg.robot_config.kps,
-                np.zeros_like(dq_sim_raw),
-                dq_sim_raw,
-                cfg.robot_config.kds,
-                0.0,
-            )
-            tau = np.clip(tau, -cfg.robot_config.tau_limit, cfg.robot_config.tau_limit)
-
-            data.ctrl[:] = tau
-            mujoco.mj_step(model, data)
+            # --- 外层循环：渲染与同步 ---
             viewer.render()
 
-            # 打印状态
-            if count_lowlevel % 20 == 0:
+            # 打印状态 (每100个物理步打印一次)
+            if count_lowlevel % 120 == 0:
                 mode = "策略" if ort_session else "PD"
                 print(
                     f"\r[{mode}] 指令: x={cmd_x:+.2f} y={cmd_y:+.2f} yaw={cmd_yaw:+.2f} | "
@@ -442,7 +459,12 @@ def main(args):
                     flush=True,
                 )
 
-            count_lowlevel += 1
+            # --- 关键：时间同步 ---
+            # 计算刚才的计算和渲染花了多少时间
+            elapsed_time = time.time() - cycle_start_time
+            # 如果跑得太快（小于目标时间），就睡一会儿
+            if elapsed_time < target_cycle_time:
+                time.sleep(target_cycle_time - elapsed_time)
 
     except KeyboardInterrupt:
         print("\n\n程序已停止")
