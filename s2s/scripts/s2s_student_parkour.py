@@ -16,6 +16,7 @@ import argparse
 import cv2
 
 import sys
+
 sys.path.append(str(Path(__file__).parent.parent))
 from joystick_interface import JoystickInterface
 
@@ -73,12 +74,8 @@ class StudentSim2simCfg:
     class sim_config:
         # 修改为你的 leggedrobot.xml 绝对路径或相对路径
         base_dir = Path(__file__).resolve().parent.parent.parent
-        mujoco_model_path = (
-            base_dir / "s2s" / "leggedrobot.xml"
-        ).as_posix()
-        plugin_lib_path = (
-            base_dir / "lib" / "libsensor_ray.so"
-        ).as_posix()
+        mujoco_model_path = (base_dir / "s2s" / "leggedrobot.xml").as_posix()
+        plugin_lib_path = (base_dir / "lib" / "libsensor_ray.so").as_posix()
 
         sim_duration = 120.0
         dt = 0.005
@@ -151,40 +148,48 @@ def get_extreme_parkour_obs_buf(data, cfg, parkour_state, action_history):
     omega_body = r.apply(omega_world, inverse=True)
 
     # 计算roll, pitch (IMU观测)
-    roll, pitch, yaw = r.as_euler('xyz')
+    roll, pitch, yaw = r.as_euler("xyz")
     imu_obs = np.array([wrap_to_pi(roll), wrap_to_pi(pitch)])
 
     # 获取parkour相关状态
-    delta_yaw = parkour_state.get('delta_yaw', 0.0)
-    delta_next_yaw = parkour_state.get('delta_next_yaw', 0.0)
-    env_idx_tensor = parkour_state.get('env_idx_tensor', 1.0)  # 假设是parkour环境
-    invert_env_idx_tensor = parkour_state.get('invert_env_idx_tensor', 0.0)
+    delta_yaw = parkour_state.get("delta_yaw", 0.0)
+    delta_next_yaw = parkour_state.get("delta_next_yaw", 0.0)
+    env_idx_tensor = parkour_state.get("env_idx_tensor", 1.0)  # 假设是parkour环境
+    invert_env_idx_tensor = parkour_state.get("invert_env_idx_tensor", 0.0)
 
     # 获取commands
-    commands = np.array([parkour_state.get('cmd_x', 0.0),
-                        parkour_state.get('cmd_y', 0.0),
-                        parkour_state.get('cmd_yaw', 0.0)])
+    # 注意：y方向速度不再使用，始终为0
+    commands = np.array(
+        [
+            parkour_state.get("cmd_x", 0.0),
+            0.0,  # y方向速度设为0
+            parkour_state.get("cmd_yaw", 0.0),
+        ]
+    )
 
     # 模拟contact forces（简化）
     contact_fill = np.zeros(4)  # LF, LR, RF, RR
 
     # 构造obs_buf (53维)
     scales = cfg.normalization.isaac_obs_scales
-    obs_buf = np.concatenate([
-        omega_body * scales.ang_vel,  # [3] 0~2
-        imu_obs,  # [2] 3~4
-        np.array([0.0]),  # [1] 5 (0 * delta_yaw)
-        np.array([delta_yaw]),  # [1] 6
-        np.array([delta_next_yaw]),  # [1] 7
-        np.zeros(2),  # [2] 8~9 (0 * commands[:2])
-        np.array([commands[2]]) * scales.commands,  # [1] 10 (commands yaw)
-        np.array([env_idx_tensor]),  # [1] 11
-        np.array([invert_env_idx_tensor]),  # [1] 12
-        (q_policy - cfg.robot_config.default_dof_pos) * scales.joint_pos,  # [12] 13~24
-        dq_policy * scales.joint_vel,  # [12] 25~36
-        action_history * scales.actions,  # [12] 37~48
-        contact_fill,  # [4] 49~52
-    ])
+    obs_buf = np.concatenate(
+        [
+            omega_body * scales.ang_vel,  # [3] 0~2
+            imu_obs,  # [2] 3~4
+            np.array([0.0]),  # [1] 5 (0 * delta_yaw)
+            np.array([delta_yaw]),  # [1] 6
+            np.array([delta_next_yaw]),  # [1] 7
+            np.zeros(2),  # [2] 8~9 (0 * commands[:2])
+            np.array([commands[2]]) * scales.commands,  # [1] 10 (commands yaw)
+            np.array([env_idx_tensor]),  # [1] 11
+            np.array([invert_env_idx_tensor]),  # [1] 12
+            (q_policy - cfg.robot_config.default_dof_pos)
+            * scales.joint_pos,  # [12] 13~24
+            dq_policy * scales.joint_vel,  # [12] 25~36
+            action_history * scales.actions,  # [12] 37~48
+            contact_fill,  # [4] 49~52
+        ]
+    )
 
     return obs_buf
 
@@ -214,7 +219,9 @@ def get_depth_camera_obs(depth_image, cfg):
     """处理depth camera observation"""
     if depth_image is not None:
         # 处理depth图像
-        depth_processed = process_depth_image(depth_image, cfg.env.depth_image_size, cfg)
+        depth_processed = process_depth_image(
+            depth_image, cfg.env.depth_image_size, cfg
+        )
         return depth_processed
     else:
         # 返回零数组
@@ -229,7 +236,7 @@ def process_depth_image(depth_image, target_size, cfg):
     3. 归一化
     """
     h, w = target_size
-    
+
     # 1. Crop: 去掉底部2行，左右各4列
     if depth_image.shape[0] > 2 and depth_image.shape[1] > 8:
         depth_cropped = depth_image[:-2, 4:-4]
@@ -239,9 +246,7 @@ def process_depth_image(depth_image, target_size, cfg):
     # 2. Resize到target_size
     if depth_cropped.shape != target_size:
         depth_resized = cv2.resize(
-            depth_cropped.astype(np.float32),
-            (w, h),
-            interpolation=cv2.INTER_LINEAR
+            depth_cropped.astype(np.float32), (w, h), interpolation=cv2.INTER_LINEAR
         )
     else:
         depth_resized = depth_cropped.astype(np.float32)
@@ -257,8 +262,9 @@ def get_delta_yaw_ok_obs(delta_yaw, threshold=0.6):
     return 1.0 if abs(delta_yaw) < threshold else 0.0
 
 
-def construct_student_obs(obs_buf, measured_heights, priv_explicit, priv_latent,
-                          hist_obs_buf):
+def construct_student_obs(
+    obs_buf, measured_heights, priv_explicit, priv_latent, hist_obs_buf
+):
     """
     构造student策略的observation（不含depth image）
     顺序：
@@ -268,18 +274,20 @@ def construct_student_obs(obs_buf, measured_heights, priv_explicit, priv_latent,
     4. priv_latent (29维)
     5. hist_obs_buf (10帧 * 53维 = 530维)
     总共: 53 + 132 + 9 + 29 + 530 = 753维
-    
+
     注意：depth image通过单独的depth_encoder处理，得到depth_latent（32维）
     depth_latent会替换measured_heights（132维）中的scan部分
     """
     # 构造extreme_parkour_observations
-    obs = np.concatenate([
-        obs_buf,  # 53
-        measured_heights,  # 132 (会被depth_latent替换)
-        priv_explicit,  # 9
-        priv_latent,  # 29
-        hist_obs_buf.flatten(),  # 530 (10 * 53)
-    ]).astype(np.float32)
+    obs = np.concatenate(
+        [
+            obs_buf,  # 53
+            measured_heights,  # 132 (会被depth_latent替换)
+            priv_explicit,  # 9
+            priv_latent,  # 29
+            hist_obs_buf.flatten(),  # 530 (10 * 53)
+        ]
+    ).astype(np.float32)
 
     return obs
 
@@ -320,7 +328,9 @@ def get_ray_caster_info(model, data, sensor_name):
 
 def run_mujoco_student(policy_session, depth_encoder_session, cfg):
     # 初始化joystick
-    joy = JoystickInterface(device_path="/dev/input/js0", max_v_x=2.0, max_v_y=1.0, max_omega=1.5)
+    joy = JoystickInterface(
+        device_path="/dev/input/js0", max_v_x=2.0, max_v_y=1.0, max_omega=1.5
+    )
 
     # 加载ray caster插件
     try:
@@ -384,25 +394,27 @@ def run_mujoco_student(policy_session, depth_encoder_session, cfg):
 
         # 模拟parkour状态
         parkour_state = {
-            'delta_yaw': 0.0,
-            'delta_next_yaw': 0.0,
-            'env_idx_tensor': 1.0,
-            'invert_env_idx_tensor': 0.0,
-            'cmd_x': 0.0,
-            'cmd_y': 0.0,
-            'cmd_yaw': 0.0
+            "delta_yaw": 0.0,
+            "delta_next_yaw": 0.0,
+            "env_idx_tensor": 1.0,
+            "invert_env_idx_tensor": 0.0,
+            "cmd_x": 0.0,
+            "cmd_y": 0.0,
+            "cmd_yaw": 0.0,
         }
 
         count_lowlevel = 0
         cmd_x, cmd_y, cmd_yaw = 0.0, 0.0, 0.0
-        
+
         # 初始化depth_latent和yaw
         depth_latent = np.zeros(32, dtype=np.float32)  # scan_encoder_dims[-1] = 32
         yaw = np.zeros(2, dtype=np.float32)
 
         while viewer.is_running():
             # 1. 获取物理数据
-            obs_buf = get_extreme_parkour_obs_buf(data, cfg, parkour_state, action_policy)
+            obs_buf = get_extreme_parkour_obs_buf(
+                data, cfg, parkour_state, action_policy
+            )
             measured_heights = get_measured_heights(data, cfg)
             priv_explicit = get_priv_explicit(data, cfg)
             priv_latent = get_priv_latent(data, cfg)
@@ -411,13 +423,14 @@ def run_mujoco_student(policy_session, depth_encoder_session, cfg):
             depth_obs = None
             try:
                 # 尝试从raycastercamera获取数据
-                h_rays, v_rays, pairs = get_ray_caster_info(model, data, "raycastercamera")
+                h_rays, v_rays, pairs = get_ray_caster_info(
+                    model, data, "raycastercamera"
+                )
                 if pairs and len(pairs) > 0:
                     img = data.sensor("raycastercamera").data
                     # 获取第一对数据（正常图像）
                     depth_image_raw = np.array(
-                        img[pairs[0][0]:pairs[0][0]+pairs[0][1]],
-                        dtype=np.float32
+                        img[pairs[0][0] : pairs[0][0] + pairs[0][1]], dtype=np.float32
                     ).reshape(v_rays, h_rays)
                     # 转换为深度值（假设数据范围是0-1，需要转换为实际深度）
                     # 这里需要根据实际的sensor数据格式调整
@@ -434,18 +447,21 @@ def run_mujoco_student(policy_session, depth_encoder_session, cfg):
                 depth_buffer.append(depth_obs)
 
             # 3. 获取delta_yaw_ok
-            delta_yaw_ok_obs = get_delta_yaw_ok_obs(parkour_state['delta_yaw'])
+            delta_yaw_ok_obs = get_delta_yaw_ok_obs(parkour_state["delta_yaw"])
 
             # 4. 策略推理 (50Hz)
             if count_lowlevel % cfg.sim_config.decimation == 0:
                 # 获取控制命令
                 cmd_x, cmd_y, cmd_yaw = joy.get_command()
-                parkour_state['cmd_x'] = cmd_x
-                parkour_state['cmd_y'] = cmd_y
-                parkour_state['cmd_yaw'] = cmd_yaw
+                # 确保y方向速度为0（不使用y方向速度）
+                parkour_state["cmd_x"] = cmd_x
+                parkour_state["cmd_y"] = 0.0  # y方向速度设为0
+                parkour_state["cmd_yaw"] = cmd_yaw
 
                 # 更新obs_buf以包含最新的commands
-                obs_buf = get_extreme_parkour_obs_buf(data, cfg, parkour_state, action_policy)
+                obs_buf = get_extreme_parkour_obs_buf(
+                    data, cfg, parkour_state, action_policy
+                )
 
                 # 更新历史
                 hist_obs_buf.append(obs_buf.copy())
@@ -457,7 +473,7 @@ def run_mujoco_student(policy_session, depth_encoder_session, cfg):
                     measured_heights,
                     priv_explicit,
                     priv_latent,
-                    hist_obs_buf_array
+                    hist_obs_buf_array,
                 )
 
                 # 处理depth encoder（每5步更新一次）
@@ -467,42 +483,71 @@ def run_mujoco_student(policy_session, depth_encoder_session, cfg):
                         if len(depth_buffer) >= 1:
                             depth_frame = depth_buffer[-1]  # 最后一帧
                         else:
-                            depth_frame = np.zeros(cfg.env.depth_image_size, dtype=np.float32)
-                        
+                            depth_frame = np.zeros(
+                                cfg.env.depth_image_size, dtype=np.float32
+                            )
+
                         # 准备depth encoder输入
                         # depth_image: (1, 87, 58) 或 (1, 58, 87) - 需要确认顺序
                         # proprioception: obs的前53维，但delta_yaw部分设为0
                         obs_student = current_obs[:53].copy()  # num_prop = 53
                         obs_student[6:8] = 0  # 将delta_yaw部分设为0
-                        
+
                         # 调用depth encoder
                         depth_input_name = depth_encoder_session.get_inputs()[0].name
-                        proprioception_input_name = depth_encoder_session.get_inputs()[1].name
-                        
+                        proprioception_input_name = depth_encoder_session.get_inputs()[
+                            1
+                        ].name
+
                         # 注意：depth_image的形状可能是(87, 58)或(58, 87)，需要根据实际模型调整
                         # 根据agent.yaml，depth_shape是(87, 58)，所以应该是(height, width)
                         depth_image_input = depth_frame.reshape(1, *depth_frame.shape)
                         proprioception_input = obs_student.reshape(1, -1)
-                        
+
                         depth_latent_and_yaw = depth_encoder_session.run(
                             None,
                             {
                                 depth_input_name: depth_image_input.astype(np.float32),
-                                proprioception_input_name: proprioception_input.astype(np.float32)
-                            }
-                        )[0][0]  # shape: (depth_latent_dim + 2,)
-                        
+                                proprioception_input_name: proprioception_input.astype(
+                                    np.float32
+                                ),
+                            },
+                        )[0][
+                            0
+                        ]  # shape: (depth_latent_dim + 2,)
+
                         # 提取depth_latent和yaw
                         depth_latent = depth_latent_and_yaw[:-2]  # 32维
-                        yaw = depth_latent_and_yaw[-2:]  # 2维
-                        
+                        yaw_from_depth = depth_latent_and_yaw[
+                            -2:
+                        ]  # 2维 [delta_yaw, delta_next_yaw]
+
                     except Exception as e:
                         if count_lowlevel % 100 == 0:
                             print(f"\nError in depth encoder inference: {e}")
                         # 使用零数组作为fallback
-                        depth_latent = np.zeros(32, dtype=np.float32)  # scan_encoder_dims[-1] = 32
-                        yaw = np.zeros(2, dtype=np.float32)
-                
+                        depth_latent = np.zeros(
+                            32, dtype=np.float32
+                        )  # scan_encoder_dims[-1] = 32
+                        yaw_from_depth = np.zeros(2, dtype=np.float32)
+
+                # 判断摇杆是否有yaw输入（使用死区阈值）
+                yaw_deadzone = 0.05  # 死区阈值，小于此值认为摇杆松开
+                is_yaw_active = abs(cmd_yaw) > yaw_deadzone
+
+                # 根据摇杆状态决定使用哪个yaw
+                if is_yaw_active:
+                    # 摇杆有输入：使用摇杆的yaw角速度替代depth_encoder的delta_yaw
+                    # depth_encoder输出的yaw是[delta_yaw, delta_next_yaw]格式（2维）
+                    # 摇杆给出的是角速度（omega_yaw，标量），需要转换为delta_yaw格式
+                    # 注意：depth_encoder输出的yaw已经是角度差，摇杆是角速度
+                    # 简化处理：将摇杆的角速度直接作为delta_yaw（policy会处理）
+                    # 使用摇杆的delta_yaw，delta_next_yaw设为0（因为摇杆只控制当前yaw）
+                    yaw = np.array([cmd_yaw, 0.0])  # [delta_yaw_from_joystick, 0.0]
+                else:
+                    # 摇杆松开：使用depth_encoder推理的yaw
+                    yaw = yaw_from_depth
+
                 # 用yaw更新obs中的delta_yaw部分（类似Isaac Lab的obs[:, 6:8] = 1.5*yaw）
                 current_obs[6:8] = 1.5 * yaw
 
@@ -516,13 +561,15 @@ def run_mujoco_student(policy_session, depth_encoder_session, cfg):
                 try:
                     obs_input_name = policy_session.get_inputs()[0].name
                     scandots_latent_input_name = policy_session.get_inputs()[1].name
-                    
+
                     raw_action = policy_session.run(
                         None,
                         {
                             obs_input_name: current_obs[None, :].astype(np.float32),
-                            scandots_latent_input_name: depth_latent[None, :].astype(np.float32)
-                        }
+                            scandots_latent_input_name: depth_latent[None, :].astype(
+                                np.float32
+                            ),
+                        },
                     )[0][0]
 
                     # 处理输出 (Policy Order)
@@ -543,7 +590,9 @@ def run_mujoco_student(policy_session, depth_encoder_session, cfg):
                 except Exception as e:
                     print(f"\nError in policy inference: {e}")
                     # 使用零动作作为fallback
-                    action_policy = np.zeros(cfg.robot_config.num_actions, dtype=np.double)
+                    action_policy = np.zeros(
+                        cfg.robot_config.num_actions, dtype=np.double
+                    )
                     target_q_sim = cfg.robot_config.default_dof_pos
 
             # 6. PD 控制 (Sim Order)
@@ -568,12 +617,13 @@ def run_mujoco_student(policy_session, depth_encoder_session, cfg):
 
             # --- 实时状态打印 ---
             if count_lowlevel % 10 == 0:  # 每10次循环打印一次
+                yaw_source = "Joystick" if (abs(cmd_yaw) > 0.05) else "DepthEncoder"
                 print(
                     f"\r"
-                    f"Cmd: x={cmd_x:.2f} y={cmd_y:.2f} yaw={cmd_yaw:.2f} | "
-                    f"Delta yaw: {parkour_state['delta_yaw']:.2f} | "
-                    f"Delta yaw ok: {delta_yaw_ok_obs:.1f} | "
-                    f"Obs dim: {current_obs.shape[0] if 'current_obs' in locals() else 0}"
+                    f"Cmd: x={cmd_x:.2f} yaw={cmd_yaw:.2f} (y={0.0:.2f}) | "
+                    f"Yaw source: {yaw_source} | "
+                    f"Delta yaw: {current_obs[6] if 'current_obs' in locals() else 0:.3f} | "
+                    f"Delta yaw ok: {delta_yaw_ok_obs:.1f}"
                     f"\033[K",
                     end="",
                     flush=True,
@@ -588,18 +638,28 @@ def run_mujoco_student(policy_session, depth_encoder_session, cfg):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Student策略Sim2Sim实现")
     parser.add_argument(
-        "--policy_model", type=str, required=True, help="Path to ONNX policy model (policy.onnx)"
+        "--policy_model",
+        type=str,
+        required=True,
+        help="Path to ONNX policy model (policy.onnx)",
     )
     parser.add_argument(
-        "--depth_model", type=str, required=True, help="Path to ONNX depth encoder model (depth_latest.onnx)"
+        "--depth_model",
+        type=str,
+        required=True,
+        help="Path to ONNX depth encoder model (depth_latest.onnx)",
     )
     args = parser.parse_args()
 
     try:
         policy_session = ort.InferenceSession(args.policy_model)
         print("ONNX policy model loaded successfully.")
-        print(f"Policy input names: {[inp.name for inp in policy_session.get_inputs()]}")
-        print(f"Policy input shapes: {[inp.shape for inp in policy_session.get_inputs()]}")
+        print(
+            f"Policy input names: {[inp.name for inp in policy_session.get_inputs()]}"
+        )
+        print(
+            f"Policy input shapes: {[inp.shape for inp in policy_session.get_inputs()]}"
+        )
         print(f"Policy output shape: {policy_session.get_outputs()[0].shape}")
     except Exception as e:
         print(f"Error loading policy ONNX model: {e}")
@@ -608,9 +668,15 @@ if __name__ == "__main__":
     try:
         depth_encoder_session = ort.InferenceSession(args.depth_model)
         print("ONNX depth encoder model loaded successfully.")
-        print(f"Depth encoder input names: {[inp.name for inp in depth_encoder_session.get_inputs()]}")
-        print(f"Depth encoder input shapes: {[inp.shape for inp in depth_encoder_session.get_inputs()]}")
-        print(f"Depth encoder output shape: {depth_encoder_session.get_outputs()[0].shape}")
+        print(
+            f"Depth encoder input names: {[inp.name for inp in depth_encoder_session.get_inputs()]}"
+        )
+        print(
+            f"Depth encoder input shapes: {[inp.shape for inp in depth_encoder_session.get_inputs()]}"
+        )
+        print(
+            f"Depth encoder output shape: {depth_encoder_session.get_outputs()[0].shape}"
+        )
     except Exception as e:
         print(f"Error loading depth encoder ONNX model: {e}")
         exit(1)

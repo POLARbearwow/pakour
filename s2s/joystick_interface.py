@@ -14,13 +14,16 @@ class JoystickInterface:
 
         # 当前指令缓存 (线程安全)
         self.cmd_x = 0.0
-        self.cmd_y = 0.0
+        self.cmd_y = 0.0  # 不再使用，保持为0
         self.cmd_yaw = 0.0
 
         # 速度限制 (根据你的机器人能力调整)
         self.MAX_V_X = max_v_x  # m/s
-        self.MAX_V_Y = max_v_y  # m/s
+        self.MAX_V_Y = max_v_y  # m/s (不再使用)
         self.MAX_OMEGA = max_omega  # rad/s
+
+        # 死区阈值，用于判断摇杆是否松开
+        self.YAW_DEADZONE = 0.05  # 如果|cmd_yaw| < 0.05，认为摇杆松开
 
         # 摇杆原始数值范围
         self.JOY_MAX = 32767.0
@@ -69,10 +72,11 @@ class JoystickInterface:
                             if number == 1:
                                 self.cmd_x = -norm_val * self.MAX_V_X
 
-                            # Axis 0: 左摇杆左右 (Left负, Right正) -> 控制左右平移(y)
-                            # 机器人坐标系通常左为正(Y+)，所以需要反向
+                            # Axis 0: 左摇杆左右 (Left负, Right正) -> 不再使用，设为0
+                            # elif number == 0:
+                            #     self.cmd_y = -norm_val * self.MAX_V_Y
                             elif number == 0:
-                                self.cmd_y = -norm_val * self.MAX_V_Y
+                                self.cmd_y = 0.0  # y方向速度不再使用
 
                             # Axis 3: 右摇杆左右 -> 控制旋转(yaw)
                             # Left(负) -> Turn Left(正)
@@ -83,8 +87,13 @@ class JoystickInterface:
             print(f"[Joystick] 读取错误: {e}")
 
     def get_command(self):
-        """主循环调用的接口，返回 (vx, vy, dyaw)"""
-        return self.cmd_x, self.cmd_y, self.cmd_yaw
+        """主循环调用的接口，返回 (vx, vy, omega_yaw)"""
+        # 确保y方向速度始终为0
+        return self.cmd_x, 0.0, self.cmd_yaw
+
+    def is_yaw_active(self):
+        """判断yaw摇杆是否有输入（未松开）"""
+        return abs(self.cmd_yaw) > self.YAW_DEADZONE
 
     def stop(self):
         self.running = False
