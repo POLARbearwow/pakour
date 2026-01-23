@@ -120,12 +120,60 @@ python s2s/scripts/parkour_with_policy.py --load_model /path/to/model.onnx --req
 运行时会在终端显示：
 
 ```
-[策略] 指令: x=+1.50 y=-0.30 yaw=+0.50 | 速度: x=+1.23 y=-0.25 z=+0.02
+[策略] 指令: x=+1.50 y=-0.30 yaw=+0.50 | 速度: x=+1.23 y=-0.25 z=+0.02 | 接触[LF,LR,RF,RR]: ✓✓✗✗
 ```
 
 - **模式**: `[策略]` 或 `[PD]`
 - **指令**: 手柄输入的目标速度
 - **速度**: 机器人实际速度（本体坐标系）
+- **接触**: 四条腿的接触状态
+  - `✓` = 接触地面（contact_force = 0.5）
+  - `✗` = 未接触（contact_force = -0.5）
+  - 顺序：左前(LF)、左后(LR)、右前(RF)、右后(RR)
+
+### Contact Force格式说明
+
+脚本中的contact force处理与Isaac Lab完全一致：
+```python
+# Isaac Lab格式: (contact_filt.float() - 0.5)
+# 接触时: 1.0 - 0.5 = 0.5
+# 不接触时: 0.0 - 0.5 = -0.5
+```
+
+### Depth Image处理流程
+
+深度图像处理完全模拟Isaac Lab的`image_features`处理：
+
+```python
+# 1. 裁剪 (Crop): 移除底部2行和左右各4列
+cropped = depth_image[:-2, 4:-4]  # (60, 106) -> (58, 98)
+
+# 2. 下采样 (Resize): bicubic插值到58×87
+resized = cv2.resize(cropped, (87, 58), interpolation=cv2.INTER_CUBIC)
+
+# 3. 归一化 (Normalize)
+normalized = (resized / 2.0) - 0.5  # clipping_range=2.0
+
+# 4. 缓存 (Buffer): 滑动窗口保留3帧
+# 输出维度: 3 × 58 × 87 = 15,138
+```
+
+**更新频率：** 每5个物理步更新一次depth buffer（与Isaac Lab一致）
+
+**使用示例：**
+```python
+# 在策略推理中使用深度图像
+if depth_processor is not None:
+    depth_obs = depth_processor.get_depth_observation()  # 15,138维
+    # 可以将depth_obs添加到策略网络的输入中
+```
+
+**测试深度图像处理：**
+```bash
+python s2s/scripts/test_depth_processing.py
+```
+
+这确保了MuJoCo仿真与Isaac Lab训练环境的完全一致性。
 
 ---
 
@@ -139,10 +187,19 @@ pip install numpy
 pip install scipy
 ```
 
-### 可选依赖（用于策略推理）
+### 可选依赖
+
+**策略推理：**
 ```bash
 pip install onnxruntime
 ```
+
+**深度图像处理：**
+```bash
+pip install opencv-python
+```
+
+> 注意：如果没有安装opencv-python，深度图像处理将被跳过，但其他功能仍可正常运行。
 
 ---
 

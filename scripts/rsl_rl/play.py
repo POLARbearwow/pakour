@@ -16,19 +16,43 @@ import cli_args  # isort: skip
 
 # add argparse arguments
 parser = argparse.ArgumentParser(description="Train an RL agent with RSL-RL.")
-parser.add_argument("--video", action="store_true", default=False, help="Record videos during training.")
-parser.add_argument("--video_length", type=int, default=500, help="Length of the recorded video (in steps).")
 parser.add_argument(
-    "--disable_fabric", action="store_true", default=False, help="Disable fabric and use USD I/O operations."
+    "--video", action="store_true", default=False, help="Record videos during training."
 )
-parser.add_argument("--num_envs", type=int, default=1, help="Number of environments to simulate.")
+parser.add_argument(
+    "--video_length",
+    type=int,
+    default=500,
+    help="Length of the recorded video (in steps).",
+)
+parser.add_argument(
+    "--disable_fabric",
+    action="store_true",
+    default=False,
+    help="Disable fabric and use USD I/O operations.",
+)
+parser.add_argument(
+    "--num_envs", type=int, default=1, help="Number of environments to simulate."
+)
 parser.add_argument("--task", type=str, default=None, help="Name of the task.")
 parser.add_argument(
     "--use_pretrained_checkpoint",
     action="store_true",
     help="Use the pre-trained checkpoint from Nucleus.",
 )
-parser.add_argument("--real-time", action="store_true", default=False, help="Run in real-time, if possible.")
+parser.add_argument(
+    "--real-time",
+    action="store_true",
+    default=False,
+    help="Run in real-time, if possible.",
+)
+parser.add_argument(
+    "--seed",
+    type=int,
+    default=42,
+    help="Seed for environment and terrain. Same seed -> same terrain. "
+    "地形将使用curriculum模式并禁用随机难度，确保完全固定。",
+)
 # append RSL-RL cli arguments
 cli_args.add_rsl_rl_args(parser)
 # append AppLauncher cli args
@@ -49,19 +73,23 @@ import os
 import time
 import torch
 
-from scripts.rsl_rl.modules.on_policy_runner_with_extractor import OnPolicyRunnerWithExtractor
+from scripts.rsl_rl.modules.on_policy_runner_with_extractor import (
+    OnPolicyRunnerWithExtractor,
+)
 
 from isaaclab.envs import DirectMARLEnv, multi_agent_to_single_agent
 from isaaclab.utils.assets import retrieve_file_path
 from isaaclab.utils.dict import print_dict
 from isaaclab.utils.pretrained_checkpoint import get_published_pretrained_checkpoint
-from parkour_tasks.extreme_parkour_task.config.go2.agents.parkour_rl_cfg import ParkourRslRlOnPolicyRunnerCfg
+from parkour_tasks.extreme_parkour_task.config.go2.agents.parkour_rl_cfg import (
+    ParkourRslRlOnPolicyRunnerCfg,
+)
 
 from scripts.rsl_rl.exporter import (
-export_teacher_policy_as_jit, 
-export_teacher_policy_as_onnx,
-export_deploy_policy_as_jit, 
-export_deploy_policy_as_onnx,
+    export_teacher_policy_as_jit,
+    export_teacher_policy_as_onnx,
+    export_deploy_policy_as_jit,
+    export_deploy_policy_as_onnx,
 )
 from scripts.rsl_rl.vecenv_wrapper import ParkourRslRlVecEnvWrapper
 
@@ -69,14 +97,47 @@ import isaaclab_tasks  # noqa: F401
 from isaaclab_tasks.utils import get_checkpoint_path, parse_env_cfg
 
 
-
 def main():
     """Play with RSL-RL agent."""
     # parse configuration
     env_cfg = parse_env_cfg(
-        args_cli.task, device=args_cli.device, num_envs=args_cli.num_envs, use_fabric=not args_cli.disable_fabric
+        args_cli.task,
+        device=args_cli.device,
+        num_envs=args_cli.num_envs,
+        use_fabric=not args_cli.disable_fabric,
     )
-    agent_cfg: ParkourRslRlOnPolicyRunnerCfg = cli_args.parse_rsl_rl_cfg(args_cli.task, args_cli)
+    agent_cfg: ParkourRslRlOnPolicyRunnerCfg = cli_args.parse_rsl_rl_cfg(
+        args_cli.task, args_cli
+    )
+
+    # 使用命令行 seed 固定地形（相同 seed -> 相同地形）
+    terrain_seed = args_cli.seed
+    env_cfg.seed = terrain_seed
+    if hasattr(env_cfg.scene, "terrain") and hasattr(
+        env_cfg.scene.terrain, "terrain_generator"
+    ):
+        terrain_gen = env_cfg.scene.terrain.terrain_generator
+        if terrain_gen is not None:
+            # 设置seed
+            if hasattr(terrain_gen, "seed"):
+                terrain_gen.seed = terrain_seed
+                print(f"[INFO] 设置地形生成器 seed 为: {terrain_seed}")
+
+            # 确保使用curriculum模式（固定地形布局）
+            if hasattr(terrain_gen, "curriculum"):
+                terrain_gen.curriculum = True
+                print(f"[INFO] 启用curriculum模式（固定地形布局）")
+
+            # 禁用随机难度（确保地形完全固定）
+            if hasattr(terrain_gen, "random_difficulty"):
+                terrain_gen.random_difficulty = False
+                print(f"[INFO] 禁用随机难度（地形将完全固定）")
+
+            print(f"[INFO] 地形配置:")
+            print(f"  - Seed: {terrain_seed}")
+            print(f"  - Curriculum模式: {getattr(terrain_gen, 'curriculum', 'N/A')}")
+            print(f"  - 随机难度: {getattr(terrain_gen, 'random_difficulty', 'N/A')}")
+    print(f"[INFO] 设置环境 seed 为: {terrain_seed} (地形将由 seed 决定)")
 
     # specify directory for logging experiments
     log_root_path = os.path.join("logs", "rsl_rl", agent_cfg.experiment_name)
@@ -85,17 +146,23 @@ def main():
     if args_cli.use_pretrained_checkpoint:
         resume_path = get_published_pretrained_checkpoint("rsl_rl", args_cli.task)
         if not resume_path:
-            print("[INFO] Unfortunately a pre-trained checkpoint is currently unavailable for this task.")
+            print(
+                "[INFO] Unfortunately a pre-trained checkpoint is currently unavailable for this task."
+            )
             return
     elif args_cli.checkpoint:
         resume_path = retrieve_file_path(args_cli.checkpoint)
     else:
-        resume_path = get_checkpoint_path(log_root_path, agent_cfg.load_run, agent_cfg.load_checkpoint)
+        resume_path = get_checkpoint_path(
+            log_root_path, agent_cfg.load_run, agent_cfg.load_checkpoint
+        )
 
     log_dir = os.path.dirname(resume_path)
 
     # create isaac environment
-    env = gym.make(args_cli.task, cfg=env_cfg, render_mode="rgb_array" if args_cli.video else None)
+    env = gym.make(
+        args_cli.task, cfg=env_cfg, render_mode="rgb_array" if args_cli.video else None
+    )
 
     # convert to single-agent instance if required by the RL algorithm
     if isinstance(env.unwrapped, DirectMARLEnv):
@@ -118,40 +185,54 @@ def main():
 
     print(f"[INFO]: Loading model checkpoint from: {resume_path}")
     # load previously trained model
-    ppo_runner = OnPolicyRunnerWithExtractor(env, agent_cfg.to_dict(), log_dir=None, device=agent_cfg.device)
+    ppo_runner = OnPolicyRunnerWithExtractor(
+        env, agent_cfg.to_dict(), log_dir=None, device=agent_cfg.device
+    )
     ppo_runner.load(resume_path)
     print(ppo_runner)
     # obtain the trained policy for inference
 
-    estimator = ppo_runner.get_estimator_inference_policy(device=env.device) 
+    estimator = ppo_runner.get_estimator_inference_policy(device=env.device)
     if agent_cfg.algorithm.class_name == "DistillationWithExtractor":
         policy = ppo_runner.get_inference_depth_policy(device=env.unwrapped.device)
         depth_encoder = ppo_runner.get_depth_encoder_inference_policy(device=env.device)
         policy_nn = ppo_runner.alg.depth_actor
         export_model_dir = os.path.join(os.path.dirname(resume_path), "exported_deploy")
-        export_deploy_policy_as_jit(policy_nn, 
-                                    estimator,
-                                    depth_encoder,
-                                    ppo_runner.obs_normalizer, 
-                                    path=export_model_dir, 
-                                    filename="policy.pt")
+        export_deploy_policy_as_jit(
+            policy_nn,
+            estimator,
+            depth_encoder,
+            ppo_runner.obs_normalizer,
+            path=export_model_dir,
+            filename="policy.pt",
+        )
         export_deploy_policy_as_onnx(
-                            policy_nn, 
-                            estimator,
-                            depth_encoder,
-                            agent_cfg,
-                            normalizer=ppo_runner.obs_normalizer, 
-                            path=export_model_dir, 
-                            filename="policy.onnx"
-                        )
+            policy_nn,
+            estimator,
+            depth_encoder,
+            agent_cfg,
+            normalizer=ppo_runner.obs_normalizer,
+            path=export_model_dir,
+            filename="policy.onnx",
+        )
 
     else:
         policy = ppo_runner.get_inference_policy(device=env.unwrapped.device)
         policy_nn = ppo_runner.alg.policy
-        export_model_dir = os.path.join(os.path.dirname(resume_path), "exported_teacher")
-        export_teacher_policy_as_jit(policy_nn, ppo_runner.obs_normalizer, path=export_model_dir, filename="policy.pt")
+        export_model_dir = os.path.join(
+            os.path.dirname(resume_path), "exported_teacher"
+        )
+        export_teacher_policy_as_jit(
+            policy_nn,
+            ppo_runner.obs_normalizer,
+            path=export_model_dir,
+            filename="policy.pt",
+        )
         export_teacher_policy_as_onnx(
-            policy_nn, normalizer=ppo_runner.obs_normalizer, path=export_model_dir, filename="policy.onnx"
+            policy_nn,
+            normalizer=ppo_runner.obs_normalizer,
+            path=export_model_dir,
+            filename="policy.onnx",
         )
 
     dt = env.unwrapped.step_dt
@@ -169,19 +250,21 @@ def main():
         if agent_cfg.algorithm.class_name != "DistillationWithExtractor":
             with torch.inference_mode():
                 # agent stepping
-                obs[:, num_prop+num_scan:num_prop+num_scan+num_priv_explicit] = estimator.inference(obs[:, :num_prop])
-                actions = policy(obs, hist_encoding = True)
+                obs[
+                    :, num_prop + num_scan : num_prop + num_scan + num_priv_explicit
+                ] = estimator.inference(obs[:, :num_prop])
+                actions = policy(obs, hist_encoding=True)
             # env stepping
         else:
-            depth_camera = extras["observations"]['depth_camera'].to(env.device)
+            depth_camera = extras["observations"]["depth_camera"].to(env.device)
             with torch.inference_mode():
-                if env.unwrapped.common_step_counter %5 == 0:
+                if env.unwrapped.common_step_counter % 5 == 0:
                     obs_student = obs[:, :num_prop].clone()
                     obs_student[:, 6:8] = 0
                     depth_latent_and_yaw = depth_encoder(depth_camera, obs_student)
                     depth_latent = depth_latent_and_yaw[:, :-2]
                     yaw = depth_latent_and_yaw[:, -2:]
-                obs[:, 6:8] = 1.5*yaw
+                obs[:, 6:8] = 1.5 * yaw
                 # obs[:, num_prop+num_scan:num_prop+num_scan+num_priv_explicit] = estimator.inference(obs[:, :num_prop])
                 actions = policy(obs, hist_encoding=True, scandots_latent=depth_latent)
         obs, _, _, extras = env.step(actions)

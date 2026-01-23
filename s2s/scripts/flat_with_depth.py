@@ -1,22 +1,12 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: BSD-3-Clause
 """
-Parkour机器人完整控制脚本
-
+Parkour机器人完整控制脚本 (已修复速度同步问题)
 整合功能:
 1. Raycaster深度相机可视化
 2. Joystick手柄控制
 3. ONNX策略推理
-4. Contact Force处理（与Isaac Lab一致）
-5. Parkour地形
-6. 实时速度同步
-
-使用方式:
-    # 仅PD控制 + 手柄
-    python parkour_with_policy.py
-
-    # 策略控制 + 手柄
-    python parkour_with_policy.py --load_model /path/to/model.onnx
+4. Parkour地形
 """
 import mujoco
 import mujoco_viewer
@@ -38,15 +28,7 @@ except ImportError:
     ONNX_AVAILABLE = False
     print("⚠ 警告: onnxruntime未安装，策略推理功能不可用")
 
-try:
-    import cv2
-
-    CV2_AVAILABLE = True
-except ImportError:
-    CV2_AVAILABLE = False
-    print("⚠ 警告: opencv-python未安装，深度图像处理功能不可用")
-
-# 获取脚本目录呢
+# 获取脚本目录
 SCRIPT_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = SCRIPT_DIR.parent.parent
 S2S_DIR = SCRIPT_DIR.parent
@@ -88,7 +70,7 @@ class JoystickInterface:
         """后台线程：持续读取手柄输入"""
         if not os.path.exists(self.device_path):
             print(f"[Joystick] ⚠ 未找到设备 {self.device_path}")
-            print(f"[Joystick] 将以手动模式运行（无手柄输入）")
+            print(f"[Joystick] 将以键盘模式运行")
             self.running = False
             return
 
@@ -151,8 +133,6 @@ class JoystickInterface:
 # ============================================================================ #
 
 # MuJoCo -> Policy 顺序映射
-# MuJoCo: [LF_A, LF_F, LF_K, LR_A, LR_F, LR_K, RF_A, RF_F, RF_K, RR_A, RR_F, RR_K]
-# Policy: [LF_A, LR_A, RF_A, RR_A, LF_F, LR_F, RF_F, RR_F, LF_K, LR_K, RF_K, RR_K]
 sim2policy_indices = np.array([0, 3, 6, 9, 1, 4, 7, 10, 2, 5, 8, 11], dtype=np.int64)
 
 # Policy -> MuJoCo 顺序映射
@@ -169,7 +149,7 @@ class PolicyConfig:
 
     class sim_config:
         sim_duration = 120.0
-        dt = 0.005  # 200Hz物理仿真
+        dt = 0.005
         decimation = 4  # 策略频率 = 200Hz / 4 = 50Hz
 
     class robot_config:
@@ -193,159 +173,11 @@ class PolicyConfig:
         clip_actions = 100.0
 
     class env:
-        frame_stack = 10  # 历史帧数
-        num_single_obs = 45  # 单帧观测维度
+        frame_stack = 10
+        num_single_obs = 45
 
     class control:
         action_scale = 0.25
-
-
-# ============================================================================ #
-#                          Depth Image Processing                              #
-# ============================================================================ #
-
-
-class DepthImageProcessor:
-    """
-    深度图像处理器，完全模拟Isaac Lab的image_features处理流程
-
-    处理步骤（与Isaac Lab完全一致）:
-    1. 裁剪(Crop): depth_image[:-2, 4:-4] - 移除底部2行和左右各4列
-    2. 下采样(Resize): 使用bicubic插值调整到58×87分辨率
-    3. 归一化(Normalize): (depth / clipping_range) - 0.5
-    4. 缓存(Buffer): 使用滑动窗口缓存多帧
-    """
-
-    def __init__(
-        self,
-        original_size=(60, 106),  # 原始分辨率 (height, width)
-        resized=(58, 87),  # 目标分辨率 (height, width)
-        buffer_len=3,  # 缓存帧数
-        clipping_range=2.0,  # 裁剪范围（米）
-        update_interval=5,
-    ):  # 更新间隔（步数）
-        """
-        Args:
-            original_size: 原始深度图像尺寸 (height, width)
-            resized: 下采样后的尺寸 (height, width)
-            buffer_len: 深度图像历史缓存长度
-            clipping_range: 深度值裁剪范围，用于归一化
-            update_interval: 每隔多少步更新一次depth buffer
-        """
-        self.original_h, self.original_w = original_size
-        self.resized_h, self.resized_w = resized
-        self.buffer_len = buffer_len
-        self.clipping_range = clipping_range
-        self.update_interval = update_interval
-
-        # 初始化深度缓存 (buffer_len, height, width)
-        self.depth_buffer = np.zeros(
-            (buffer_len, resized[0], resized[1]), dtype=np.float32
-        )
-
-        self.step_counter = 0
-
-        if not CV2_AVAILABLE:
-            print("⚠ 警告: OpenCV未安装，深度图像处理将被跳过")
-
-    def _process_depth_image(self, depth_image):
-        """
-        处理单帧深度图像（完全模拟Isaac Lab的处理流程）
-
-        Args:
-            depth_image: 原始深度图像，形状为 (height, width) 或 (height*width,)
-
-        Returns:
-            processed_image: 处理后的深度图像，形状为 (resized_h, resized_w)
-        """
-        if not CV2_AVAILABLE:
-            return np.zeros((self.resized_h, self.resized_w), dtype=np.float32)
-
-        # 如果是一维数组，reshape成二维
-        if depth_image.ndim == 1:
-            depth_image = depth_image.reshape(self.original_h, self.original_w)
-
-        # 1. 裁剪 (Crop): 移除底部2行和左右各4列
-        # Isaac Lab: depth_image[:-2, 4:-4]
-        cropped = depth_image[:-2, 4:-4]  # (60-2, 106-8) = (58, 98)
-
-        # 2. 下采样 (Resize): 使用bicubic插值
-        # Isaac Lab: torchvision.transforms.Resize with BICUBIC
-        # OpenCV中: cv2.INTER_CUBIC 等价于 bicubic
-        resized = cv2.resize(
-            cropped,
-            (self.resized_w, self.resized_h),  # cv2.resize使用(width, height)顺序
-            interpolation=cv2.INTER_CUBIC,
-        )
-
-        # 3. 归一化 (Normalize): (depth / clipping_range) - 0.5
-        # Isaac Lab: observations.py:206-209
-        normalized = (resized / self.clipping_range) - 0.5
-
-        return normalized.astype(np.float32)
-
-    def update(self, depth_image):
-        """
-        更新深度缓存（每隔update_interval步更新一次）
-
-        Args:
-            depth_image: 原始深度图像
-
-        Returns:
-            should_update: 是否进行了更新
-        """
-        self.step_counter += 1
-
-        # 每隔update_interval步更新一次
-        if self.step_counter % self.update_interval == 0:
-            processed_image = self._process_depth_image(depth_image)
-
-            # 滑动窗口：移除最旧的一帧，添加新的一帧
-            # Isaac Lab: torch.cat([self.depth_buffer[:, 1:], processed_image.unsqueeze(0)], dim=1)
-            self.depth_buffer = np.concatenate(
-                [
-                    self.depth_buffer[1:],  # 保留后面的帧
-                    processed_image[np.newaxis, ...],  # 添加新帧
-                ],
-                axis=0,
-            )
-
-            return True
-
-        return False
-
-    def get_flattened_buffer(self):
-        """
-        获取展平的深度缓存，用于策略网络输入
-
-        Returns:
-            flattened: 展平后的深度图像 (buffer_len * height * width,)
-        """
-        # 展平: (buffer_len, height, width) -> (buffer_len * height * width,)
-        return self.depth_buffer.flatten()
-
-    def get_buffer_shape(self):
-        """获取缓存形状"""
-        return self.depth_buffer.shape
-
-    def reset_buffer(self):
-        """重置深度缓存（例如环境重置时调用）"""
-        self.depth_buffer = np.zeros(
-            (self.buffer_len, self.resized_h, self.resized_w), dtype=np.float32
-        )
-        self.step_counter = 0
-
-    def get_depth_observation(self):
-        """
-        获取用于策略网络的深度观测
-
-        如果你的策略网络需要深度图像输入，可以使用这个函数
-
-        Returns:
-            depth_obs: 展平的深度图像 (buffer_len * height * width,)
-                       与Isaac Lab的depth observation格式一致
-        """
-        return self.get_flattened_buffer()
 
 
 # ============================================================================ #
@@ -368,87 +200,12 @@ def get_obs(data):
     q_policy = q_sim[sim2policy_indices]
     dq_policy = dq_sim[sim2policy_indices]
 
-    # MuJoCo Quat [w, x, y, z] -> Scipy [x, y, z, w]
     mj_quat = data.qpos[3:7]
     quat = np.array([mj_quat[1], mj_quat[2], mj_quat[3], mj_quat[0]])
 
     omega = data.sensor("angular-velocity").data.astype(np.double)
 
     return q_policy, dq_policy, quat, omega
-
-
-def get_contact_forces(data, contact_threshold=1.0):
-    """
-    获取脚部接触力，并转换为Isaac Lab格式
-
-    Isaac Lab格式: (contact_filt.float() - 0.5)
-    - 接触时: 1.0 - 0.5 = 0.5
-    - 不接触时: 0.0 - 0.5 = -0.5
-
-    Args:
-        data: MuJoCo数据
-        contact_threshold: 接触力阈值（N），超过此值认为是接触
-
-    Returns:
-        contact_filt: 4维数组 [LF, LR, RF, RR]
-                      接触=0.5, 不接触=-0.5
-    """
-    try:
-        # 读取touch传感器数据 (顺序: LF, LR, RF, RR)
-        lf_force = data.sensor("LF_touch").data[0]
-        lr_force = data.sensor("LR_touch").data[0]
-        rf_force = data.sensor("RF_touch").data[0]
-        rr_force = data.sensor("RR_touch").data[0]
-
-        forces = np.array([lf_force, lr_force, rf_force, rr_force])
-
-        # 转换为Isaac Lab格式
-        # 接触时 (force > threshold): 1.0 - 0.5 = 0.5
-        # 不接触时 (force <= threshold): 0.0 - 0.5 = -0.5
-        contact_binary = (forces > contact_threshold).astype(np.float32)
-        contact_filt = contact_binary - 0.5
-
-        return contact_filt
-
-    except Exception as e:
-        # 如果读取失败，返回默认值（全部不接触）
-        return np.full(4, -0.5, dtype=np.float32)
-
-
-def get_raycaster_depth_image(
-    data, sensor_name="ray_caster_camera", img_height=60, img_width=106
-):
-    """
-    从MuJoCo raycaster传感器获取深度图像
-
-    Args:
-        data: MuJoCo数据
-        sensor_name: raycaster传感器名称
-        img_height: 图像高度（垂直射线数）
-        img_width: 图像宽度（水平射线数）
-
-    Returns:
-        depth_image: 深度图像数组 (height, width)，失败时返回None
-    """
-    try:
-        # 读取raycaster传感器数据
-        sensor_data = data.sensor(sensor_name).data
-
-        # 确保数据长度正确
-        expected_size = img_height * img_width
-        if len(sensor_data) < expected_size:
-            return None
-
-        # Reshape为图像格式 (height, width)
-        depth_image = np.array(sensor_data[:expected_size], dtype=np.float32).reshape(
-            img_height, img_width
-        )
-
-        return depth_image
-
-    except Exception as e:
-        # 如果读取失败，返回None
-        return None
 
 
 def pd_control(target_q, q, kp, target_dq, dq, kd, default_pos):
@@ -476,9 +233,9 @@ def main(args):
     SENSOR_NAME = "ray_caster_camera"
     # ----------------------------------------
 
-    print("=" * 70)
-    print("🤖 Parkour机器人 - 策略控制 + Raycaster可视化 (实时同步版)")
-    print("=" * 70)
+    print("=" * 60)
+    print("Parkour机器人 - 策略控制 + Raycaster可视化 (实时同步版)")
+    print("=" * 60)
 
     # 1. 加载raycaster插件
     plugin_loaded = False
@@ -494,7 +251,7 @@ def main(args):
             continue
 
     if not plugin_loaded:
-        print(f"⚠ Raycaster插件未加载（可继续运行，但无raycaster可视化）")
+        print(f"⚠ Raycaster插件未加载")
 
     # 2. 加载ONNX模型
     ort_session = None
@@ -512,7 +269,7 @@ def main(args):
             print("⚠ 未指定ONNX模型")
             print("  使用 --load_model 参数指定模型路径")
             return
-        print("⚠ 无策略模式运行（仅PD控制保持站立）")
+        print("⚠ 无策略模式运行（仅PD控制）")
 
     # 3. 加载MuJoCo模型
     try:
@@ -527,68 +284,47 @@ def main(args):
     # 初始化关节位置
     data.qpos[7:] = cfg.robot_config.default_dof_pos
 
-    # 4. 预热仿真（让raycaster插件初始化）
+    # 4. 预热仿真
     print("\n预热仿真 (50 steps)...")
     for _ in range(50):
         mujoco.mj_step(model, data)
 
-    # 5. 初始化深度图像处理器
-    depth_processor = None
-    if plugin_loaded and CV2_AVAILABLE:
-        depth_processor = DepthImageProcessor(
-            original_size=(60, 106),  # raycaster原始分辨率
-            resized=(58, 87),  # 下采样后分辨率
-            buffer_len=3,  # 缓存3帧
-            clipping_range=2.0,  # 2米裁剪范围
-            update_interval=5,  # 每5步更新一次
-        )
-        print(f"✓ 深度图像处理器已初始化:")
-        print(f"   - 原始尺寸: 60×106")
-        print(f"   - 裁剪后: 58×98 (移除底部2行和左右各4列)")
-        print(f"   - 下采样: 58×87 (bicubic)")
-        print(f"   - 缓存帧数: 3")
-        print(f"   - 更新间隔: 每5步")
-        print(f"   - 输出维度: {3 * 58 * 87} (展平)")
+    # 5. 传感器诊断
+    try:
+        sensor_data = data.sensor(SENSOR_NAME).data
+        valid_data = sensor_data[(sensor_data > 0.01) & (sensor_data < 2.0)]
+        print("-" * 40)
+        print(f"📊 传感器诊断:")
+        if len(valid_data) > 0:
+            print(f"   ✓ 检测到有效障碍物点数: {len(valid_data)}")
+            print(f"   - 最小距离: {np.min(valid_data):.3f} m")
+            print(f"   - 最大距离: {np.max(valid_data):.3f} m")
+        else:
+            print(f"   ⚠ 未检测到障碍物")
+        print("-" * 40)
+    except Exception as e:
+        print(f"⚠ 无法读取传感器数据: {e}")
 
-    # 6. 传感器诊断
-    if plugin_loaded:
-        try:
-            sensor_data = data.sensor(SENSOR_NAME).data
-            valid_data = sensor_data[(sensor_data > 0.01) & (sensor_data < 2.0)]
-            print("-" * 50)
-            print(f"📊 Raycaster传感器诊断:")
-            if len(valid_data) > 0:
-                print(f"   ✓ 检测到有效障碍物点数: {len(valid_data)}")
-                print(f"   - 最小距离: {np.min(valid_data):.3f} m")
-                print(f"   - 最大距离: {np.max(valid_data):.3f} m")
-            else:
-                print(f"   ⚠ 未检测到障碍物（可能需要调整相机位置）")
-            print("-" * 50)
-        except Exception as e:
-            print(f"⚠ 无法读取传感器数据: {e}")
-
-    # 7. 初始化手柄
+    # 6. 初始化手柄
     joy = JoystickInterface(
         device_path="/dev/input/js0", max_v_x=2.0, max_v_y=1.0, max_omega=1.5
     )
 
-    print("\n" + "=" * 70)
-    print("🎮 控制说明:")
+    print("\n" + "=" * 60)
+    print("控制说明:")
     print("  手柄:")
-    print("    - 左摇杆上下: 前进/后退")
-    print("    - 左摇杆左右: 左右平移")
-    print("    - 右摇杆左右: 原地旋转")
-    print("\n  Viewer:")
+    print("    - 左摇杆: 前后左右移动")
+    print("    - 右摇杆(左右): 旋转")
+    print("  Viewer:")
     print("    - 左键双击: 跟踪物体")
-    print("    - 右键拖动: 平移视角")
-    print("    - Ctrl+右键拖动: 旋转视角")
+    print("    - 右键拖动: 平移")
+    print("    - Ctrl+右键: 旋转")
     print("    - 滚轮: 缩放")
     print("    - Tab: 打开GUI (查看射线可视化)")
-    print("\n  退出: 关闭viewer窗口或按Ctrl+C")
-    print("=" * 70)
+    print("=" * 60)
 
     # 7. 启动Viewer
-    print("\n启动MuJoCo Viewer...")
+    print("\n启动Viewer...")
     viewer = mujoco_viewer.MujocoViewer(model, data)
 
     # 设置相机
@@ -601,7 +337,6 @@ def main(args):
     action_policy = np.zeros(cfg.robot_config.num_actions, dtype=np.double)
     target_q_sim = np.zeros(cfg.robot_config.num_actions, dtype=np.double)
 
-    # 历史观测缓存
     hist_obs = deque(maxlen=cfg.env.frame_stack)
     for _ in range(cfg.env.frame_stack):
         hist_obs.append(np.zeros(cfg.env.num_single_obs, dtype=np.float32))
@@ -611,10 +346,10 @@ def main(args):
 
     # ================= 速率控制参数 =================
     # 物理步长 0.005s，目标渲染帧率约 33 FPS
-    # 每6个物理步更新一次画面
+    # 这意味着每跑 6 步物理仿真，更新一次画面
     render_decimation = 6
     target_cycle_time = cfg.sim_config.dt * render_decimation
-    print(f"⏱️  实时同步: 目标每帧 {target_cycle_time:.4f}s (约33FPS)")
+    print(f"⏱️ 实时同步已启用: 目标每帧耗时 {target_cycle_time:.4f}s (约33FPS)")
     print("✓ Viewer已启动\n")
 
     # 9. 仿真循环
@@ -628,9 +363,6 @@ def main(args):
                 # 获取观测
                 q_policy, dq_policy, quat, omega = get_obs(data)
 
-                # 获取接触力 (Isaac Lab格式: 接触=0.5, 不接触=-0.5)
-                contact_filt = get_contact_forces(data, contact_threshold=1.0)
-
                 # 计算实际速度 (用于打印)
                 vel_world = data.qvel[:3]
                 r_temp = R.from_quat(quat)
@@ -638,12 +370,6 @@ def main(args):
 
                 # 获取手柄指令
                 cmd_x, cmd_y, cmd_yaw = joy.get_command()
-
-                # 更新深度图像缓存（每5步更新一次，与Isaac Lab一致）
-                if depth_processor is not None:
-                    depth_image = get_raycaster_depth_image(data, SENSOR_NAME, 60, 106)
-                    if depth_image is not None:
-                        depth_processor.update(depth_image)
 
                 # 策略推理 (50Hz，即每4步物理推理一次)
                 if ort_session and count_lowlevel % cfg.sim_config.decimation == 0:
@@ -723,24 +449,12 @@ def main(args):
             # --- 外层循环：渲染与同步 ---
             viewer.render()
 
-            # 打印状态 (每120个物理步打印一次，即每20次渲染)
+            # 打印状态 (每100个物理步打印一次)
             if count_lowlevel % 120 == 0:
                 mode = "策略" if ort_session else "PD"
-                # 格式化contact状态 (用✓表示接触，✗表示不接触)
-                contact_str = "".join(
-                    ["✓" if c > 0 else "✗" for c in contact_filt]
-                )  # LF,LR,RF,RR
-
-                # 深度图像信息（如果启用）
-                depth_info = ""
-                if depth_processor is not None:
-                    depth_buffer_flat = depth_processor.get_flattened_buffer()
-                    depth_info = f" | Depth: {len(depth_buffer_flat)}维"
-
                 print(
                     f"\r[{mode}] 指令: x={cmd_x:+.2f} y={cmd_y:+.2f} yaw={cmd_yaw:+.2f} | "
-                    f"速度: x={vel_body[0]:+.2f} y={vel_body[1]:+.2f} z={vel_body[2]:+.2f} | "
-                    f"接触[LF,LR,RF,RR]: {contact_str}{depth_info}  ",
+                    f"速度: x={vel_body[0]:+.2f} y={vel_body[1]:+.2f} z={vel_body[2]:+.2f}  ",
                     end="",
                     flush=True,
                 )
@@ -769,7 +483,7 @@ def main(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="Parkour机器人策略控制（带Raycaster可视化和Contact Force）"
+        description="Parkour机器人策略控制（带Raycaster可视化）"
     )
     parser.add_argument(
         "--load_model",
